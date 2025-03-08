@@ -1,0 +1,184 @@
+import sys
+from PyQt5.QtWidgets import (
+    QApplication, QMainWindow, QWidget, QHBoxLayout, QVBoxLayout,
+    QLabel, QPushButton, QTextEdit, QCheckBox, QStackedWidget, QSpacerItem, QSizePolicy
+)
+from PyQt5.QtGui import QPixmap, QIcon, QFont
+from PyQt5.QtCore import Qt
+
+
+class UIHelper:
+    """Utility class for reusable UI components and styles."""
+    @staticmethod
+    def create_label(text, font_size=12, fixed_size=None, align=None):
+        label = QLabel(text)
+        font = QFont("Roboto", font_size)
+        label.setFont(font)
+        label.setStyleSheet(f"color: #F1F1F1; font-size: {font_size}px;")
+        if fixed_size:
+            label.setFixedSize(*fixed_size)
+        if align:
+            label.setAlignment(align)
+        return label
+
+    @staticmethod
+    def create_button(text, width=170, height=36, callback=None):
+        button = QPushButton(text)
+        button.setStyleSheet(
+            "background-color: white; color: black; padding: 5px; border-radius: 8px")
+        button.setFixedSize(width, height)
+        if callback:
+            button.clicked.connect(callback)
+        return button
+
+    @staticmethod
+    def update_toggle_icon(toggle, state):
+        toggle.setIcon(
+            QIcon("./assets/toggleOn.png" if state else "./assets/toggleOff.png"))
+
+
+class HomePage(QWidget):
+    def __init__(self, stacked_widget):
+        super().__init__()
+        self.init_ui()
+
+    def init_ui(self):
+        main_layout = QHBoxLayout()
+        left_layout = self.create_left_section()
+        right_layout = self.create_right_section()
+        main_layout.addLayout(left_layout)
+        main_layout.addLayout(right_layout)
+        self.setLayout(main_layout)
+
+    def create_left_section(self):
+        left_layout = QVBoxLayout()
+
+        # Logo
+        logo_label = QLabel()
+        logo_label.setPixmap(QPixmap("assets/PostSync Logo.png"))
+        logo_label.setAlignment(Qt.AlignLeft)
+        logo_label.setFixedSize(242, 65)
+        left_layout.addWidget(logo_label)
+
+        # Pressure Data
+        left_layout.addWidget(UIHelper.create_label(
+            "Pressure Data", 10, (200, 16)))
+
+        # Placeholder for displaying the heatmap of pressure data from the sensors
+        pressure_grid = UIHelper.create_label("", fixed_size=(200, 200))
+        pressure_grid.setStyleSheet(
+            "border: 1px solid #F1F1F1; border-radius: 8px")
+        left_layout.addWidget(pressure_grid)
+
+        # Current Posture
+        left_layout.addWidget(UIHelper.create_label(
+            "Current Posture", 10, (200, 30), Qt.AlignBottom))
+
+        # Placeholder for displaying current posture status
+        self.posture_status = UIHelper.create_label("", fixed_size=(200, 48))
+        self.posture_status.setStyleSheet(
+            "border: 1px solid #F1F1F1; border-radius: 8px; padding: 5px;")
+        left_layout.addWidget(self.posture_status)
+
+        return left_layout
+
+    def create_right_section(self):
+        right_layout = QVBoxLayout()
+        right_layout.addWidget(UIHelper.create_label("Logs", 12, (40, 20)))
+
+        self.log_text = QTextEdit()
+        self.log_text.setReadOnly(True)
+        self.log_text.setStyleSheet(
+            "border-radius: 8px; background: #F1F1F1;padding: 5px")
+        self.log_text.setFixedSize(400, 260)
+        right_layout.addWidget(self.log_text)
+
+        bottom_layout = self.create_bottom_controls()
+        right_layout.addLayout(bottom_layout)
+        return right_layout
+
+    def create_bottom_controls(self):
+        bottom_layout = QHBoxLayout()
+        left_controls = QVBoxLayout()
+
+        self.start_button = UIHelper.create_button(
+            "Start", callback=self.toggle_start_button)
+        left_controls.addWidget(UIHelper.create_label("Power", 12, (170, 16)))
+        left_controls.addWidget(self.start_button)
+        left_controls.addWidget(UIHelper.create_label("Info", 12, (170, 16)))
+        left_controls.addWidget(UIHelper.create_button("Guidelines"))
+        bottom_layout.addLayout(left_controls)
+
+        # Add spacing before the alerts section
+        bottom_layout.addSpacerItem(QSpacerItem(
+            36, 36, QSizePolicy.Minimum, QSizePolicy.Fixed))
+
+        bottom_layout.addLayout(self.create_alerts_section())
+
+        return bottom_layout
+
+    def create_alerts_section(self):
+        alerts_layout = QVBoxLayout()
+        alerts_layout.addWidget(UIHelper.create_label("Alerts", 12, (170, 16)))
+
+        # Haptic Feedback Toggle
+        haptic_layout = self.create_toggle_section("Haptic Feedback")
+        self.haptic_toggle = haptic_layout[1]
+        alerts_layout.addLayout(haptic_layout[0])
+
+        # Notifications Toggle
+        notif_layout = self.create_toggle_section("Notifications")
+        self.notif_toggle = notif_layout[1]
+        alerts_layout.addLayout(notif_layout[0])
+
+        return alerts_layout
+
+    def create_toggle_section(self, label_text):
+        layout = QHBoxLayout()
+        layout.addWidget(UIHelper.create_label(label_text, 10, (120, 24)))
+        toggle = QCheckBox()
+        toggle.setIcon(QIcon("./assets/toggleOff.png"))
+        toggle.setIconSize(QPixmap("./assets/toggleOff.png").size())
+        toggle.setStyleSheet(
+            "QCheckBox::indicator { width: 0px; height: 0px; }")
+        toggle.stateChanged.connect(
+            lambda state: UIHelper.update_toggle_icon(toggle, state))
+        layout.addWidget(toggle)
+        return layout, toggle
+
+    def toggle_start_button(self):
+        is_start = self.start_button.text() == "Start"
+        self.start_button.setText("Stop" if is_start else "Start")
+        self.start_button.setStyleSheet(
+            "background-color: #1B744D; color: #F1F1F1 ; padding: 5px; border-radius: 8px" if is_start else
+            "background-color: #F1F1F1 ; color: black; padding: 5px; border-radius: 8px"
+        )
+
+
+class GuidelinesPage(QWidget):
+    def __init__(self, stacked_widget):
+        super().__init__()
+        self.setLayout(QVBoxLayout())
+
+
+class PostSyncApp(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.setWindowIcon(QIcon('./assets/logo.png'))
+        self.setWindowTitle("PostSync App")
+        self.setFixedSize(760, 480)
+        self.setStyleSheet("background-color:#1E1E1E")
+        self.setContentsMargins(36, 24, 36, 24)
+
+        self.stacked_widget = QStackedWidget()
+        self.stacked_widget.addWidget(HomePage(self.stacked_widget))
+        self.stacked_widget.addWidget(GuidelinesPage(self.stacked_widget))
+
+        self.setCentralWidget(self.stacked_widget)
+
+
+if __name__ == "__main__":
+    app = QApplication(sys.argv)
+    window = PostSyncApp()
+    window.show()
+    sys.exit(app.exec_())

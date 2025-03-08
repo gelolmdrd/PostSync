@@ -1,0 +1,14 @@
+PyQt5
+websockets
+pyqtgraph
+numpy
+pandas
+scikit-learn
+scikeras
+joblib
+opencv-python
+mediapipe
+scikit-learn
+asyncio
+playsound
+pyserial 
