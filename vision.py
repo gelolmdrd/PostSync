@@ -10,8 +10,8 @@ mp_pose = mp.solutions.pose
 pose = mp_pose.Pose(min_detection_confidence=0.5, min_tracking_confidence=0.5)
 
 # Load Pretrained Model and Scaler
-model = joblib.load('PostSync/models/svm.pkl')
-scaler = joblib.load('PostSync/models/scaler.pkl')
+model = joblib.load('./models/svm.pkl')
+scaler = joblib.load('./models/scaler.pkl')
 
 # List of required landmarks
 required_landmarks = [
