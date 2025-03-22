@@ -10,5 +10,6 @@ opencv-python
 mediapipe
 scikit-learn
 asyncio
-playsound
+playsound==1.2.2
 pyserial 
+plyer
