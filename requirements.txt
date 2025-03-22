@@ -12,3 +12,6 @@ scikit-learn
 asyncio
 playsound
 pyserial 
+requests
+ipykernel
+seaborn

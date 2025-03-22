@@ -4,7 +4,7 @@ import time
 from datetime import datetime
 
 # NodeMCU Server IP (Change this to your actual IP)
-NODEMCU_IP = "http://192.168.1.100"  # Replace with your NodeMCU’s local IP
+NODEMCU_IP = "http://192.168.198.112"  # Replace with your NodeMCU’s local IP
 ENDPOINT = "/get_data"  # The API route that provides sensor data
 
 # Sensor Labels (from your sensor image)
@@ -22,12 +22,15 @@ csv_filename = f"pressure_sensor_data_{timestamp}.csv"
 # Data collection setup
 data_list = []
 start_time = time.time()
-print(f"Collecting data for 10 seconds... Saving to {csv_filename}")
+timeout = 3  # Start with a moderate timeout
 
-while time.time() - start_time < 10:
+print(f"Collecting data for 30 seconds... Saving to {csv_filename}")
+
+while time.time() - start_time < 30:
     try:
         # Fetch data from NodeMCU
-        response = requests.get(f"{NODEMCU_IP}{ENDPOINT}", timeout=2)
+        response = requests.get(f"{NODEMCU_IP}{ENDPOINT}", timeout=timeout)
+
         if response.status_code == 200:
             csv_data = response.text.strip()  # Get raw CSV string
             sensor_values = csv_data.split(",")  # Split CSV string into list
@@ -35,11 +38,17 @@ while time.time() - start_time < 10:
             if len(sensor_values) == len(SENSOR_LABELS):  # Ensure correct number of sensors
                 data_list.append([float(value)
                                  for value in sensor_values])  # Convert to float
+                # Reduce timeout if response is fast
+                timeout = max(2, timeout - 0.5)
         else:
-            print(f"Error: Received status code {response.status_code}")
+            print(f"Warning: Received status code {response.status_code}")
+
+    except requests.Timeout:
+        print("Warning: NodeMCU response timed out. Retrying faster...")
+        timeout = min(7, timeout + 1)  # Increase timeout to handle delays
 
     except requests.RequestException as e:
-        print(f"Error fetching data: {e}")
+        print(f"Warning: Request failed: {e}")
 
 # Save Data to CSV
 df = pd.DataFrame(data_list, columns=SENSOR_LABELS)
