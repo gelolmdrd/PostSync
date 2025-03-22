@@ -1,10 +1,14 @@
 import sys
+import mediapipe as mp
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QHBoxLayout, QVBoxLayout,
     QLabel, QPushButton, QTextEdit, QCheckBox, QStackedWidget, QSpacerItem, QSizePolicy
 )
 from PyQt5.QtGui import QPixmap, QIcon, QFont
 from PyQt5.QtCore import Qt
+from features import Features, PostureDetector
+from datetime import datetime
+
 
 
 class UIHelper:
@@ -40,6 +44,10 @@ class UIHelper:
 class HomePage(QWidget):
     def __init__(self, stacked_widget):
         super().__init__()
+        self.features = Features()
+        self.detector = PostureDetector()  # Initialize PostureDetector
+        self.detector.posture_updated.connect(self.update_posture_status)
+        self.detector.notification_alert.connect(self.show_notification)
         self.init_ui()
 
     def init_ui(self):
@@ -77,7 +85,7 @@ class HomePage(QWidget):
         # Placeholder for displaying current posture status
         self.posture_status = UIHelper.create_label("", fixed_size=(200, 48))
         self.posture_status.setStyleSheet(
-            "border: 1px solid #F1F1F1; border-radius: 8px; padding: 5px;")
+            "border: 1px solid #F1F1F1; border-radius: 8px; padding: 5px; color: white; font-weight: bold;")
         left_layout.addWidget(self.posture_status)
 
         return left_layout
@@ -101,8 +109,8 @@ class HomePage(QWidget):
         bottom_layout = QHBoxLayout()
         left_controls = QVBoxLayout()
 
-        self.start_button = UIHelper.create_button(
-            "Start", callback=self.toggle_start_button)
+        self.start_button = UIHelper.create_button("Start")
+        self.start_button.clicked.connect(self.handle_start)
         left_controls.addWidget(UIHelper.create_label("Power", 12, (170, 16)))
         left_controls.addWidget(self.start_button)
         left_controls.addWidget(UIHelper.create_label("Info", 12, (170, 16)))
@@ -116,7 +124,7 @@ class HomePage(QWidget):
         bottom_layout.addLayout(self.create_alerts_section())
 
         return bottom_layout
-
+    
     def create_alerts_section(self):
         alerts_layout = QVBoxLayout()
         alerts_layout.addWidget(UIHelper.create_label("Alerts", 12, (170, 16)))
@@ -129,9 +137,24 @@ class HomePage(QWidget):
         # Notifications Toggle
         notif_layout = self.create_toggle_section("Notifications")
         self.notif_toggle = notif_layout[1]
+        self.notif_toggle.stateChanged.connect(self.toggle_notifications)
         alerts_layout.addLayout(notif_layout[0])
 
         return alerts_layout
+    
+    def toggle_notifications(self, state):
+        """Enable or disable pop-up notifications based on user toggle."""
+        enabled = state == Qt.Checked  # Convert checkbox state to True/False
+        self.detector.enable_notifications(enabled)
+        
+        status = "enabled" if enabled else "disabled"
+        print(f"Notifications {status}")  # Debugging step
+        self.log_text.append(f"[SETTINGS]: Notifications {status}")
+
+
+    def show_notification(self, message):
+        """Display notification alerts in the log."""
+        self.log_text.append(f"[ALERT]: {message}")
 
     def create_toggle_section(self, label_text):
         layout = QHBoxLayout()
@@ -145,6 +168,16 @@ class HomePage(QWidget):
             lambda state: UIHelper.update_toggle_icon(toggle, state))
         layout.addWidget(toggle)
         return layout, toggle
+    
+    def update_posture_status(self, posture):
+        """Update the UI with the detected posture and log it with a timestamp."""
+        self.posture_status.setText(posture)
+        
+        # Get current date and time
+        current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        
+        # Append log message with timestamp
+        self.log_text.append(f"[{current_time}] Detected posture: {posture}")
 
     def toggle_start_button(self):
         is_start = self.start_button.text() == "Start"
@@ -154,6 +187,14 @@ class HomePage(QWidget):
             "background-color: #F1F1F1 ; color: black; padding: 5px; border-radius: 8px"
         )
 
+    def handle_start(self):
+        """Handles the Start/Stop button click."""
+        self.toggle_start_button()
+        
+        if self.start_button.text() == "Stop":
+            self.detector.start_detection()
+        else:
+            self.detector.stop_detection()
 
 class GuidelinesPage(QWidget):
     def __init__(self, stacked_widget):
