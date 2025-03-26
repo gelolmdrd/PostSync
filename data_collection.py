@@ -2,9 +2,8 @@ import requests
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
-import csv
-import os
 import tkinter as tk
+import csv
 from datetime import datetime
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.animation import FuncAnimation
@@ -20,6 +19,7 @@ SENSOR_LABELS = [
     "Sensor_10", "Sensor_11", "Sensor_12", "Sensor_13"
 ]
 
+# Chair layout representation
 chair_layout = np.array([
     [1,   0,   0,   0,   4],
     [2,   0,   8,   0,   5],
@@ -28,21 +28,31 @@ chair_layout = np.array([
     [0,   11,  12,  13,  0]
 ])
 
+# Threshold for detecting a user
+USER_DETECTION_THRESHOLD = 1.0
+UPRIGHT_HIP_THRESHOLD = 15.0  # Minimum percentage load for sensors 3 and 6
+
 # Initialize GUI
 root = tk.Tk()
 root.title("Real-Time Pressure Sensor Heatmap")
 
 # Create a Matplotlib figure for the heatmap
 fig, ax = plt.subplots(figsize=(6, 6))
+cbar = None  # Variable to hold the color bar reference
 
 # Initialize heatmap with dummy values
 dummy_matrix = np.full_like(chair_layout, np.nan, dtype=np.float64)
 heatmap = sns.heatmap(dummy_matrix, annot=False, cmap="RdYlGn_r",
                       linewidths=1, linecolor="gray", cbar=True, ax=ax, vmin=0, vmax=10)
+cbar = heatmap.collections[0].colorbar  # Store the color bar
 
 # Embedding Matplotlib figure inside Tkinter
 canvas = FigureCanvasTkAgg(fig, master=root)
 canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+
+# Label for detected posture
+posture_label = tk.Label(root, text="Detecting...", font=("Arial", 14, "bold"))
+posture_label.pack(pady=10)
 
 # Recording state
 is_recording = False
@@ -51,93 +61,83 @@ csv_file = None
 csv_writer = None
 
 
-def start_recording():
-    """Start recording data to a CSV file"""
-    global is_recording, csv_filename, csv_file, csv_writer
-    if not is_recording:
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        csv_filename = f"pressure_data_{timestamp}.csv"
-        csv_file = open(csv_filename, mode='w', newline='')
-        csv_writer = csv.writer(csv_file)
-        csv_writer.writerow(["Timestamp"] + SENSOR_LABELS)  # Write header
-        is_recording = True
-        start_button.config(state=tk.DISABLED)
-        stop_button.config(state=tk.NORMAL)
-        print(f"Recording started: {csv_filename}")
+def classify_posture(sensor_values):
+    """Classifies posture based on sensor data"""
+    total_force = sum(sensor_values)
+    if total_force < USER_DETECTION_THRESHOLD:
+        return "No User Detected"
 
+    percentages = [(v / total_force) * 100 for v in sensor_values]
+    upright_sensors = [1, 2, 3, 4, 5, 6, 7, 10, 11, 12, 13]
+    left_sensors = [1, 2, 3, 7]
+    right_sensors = [4, 5, 6, 10]
+    forward_sensors = [1, 2, 3, 4, 5, 6]
+    back_sensors = [7, 10, 11, 12, 13]
 
-def stop_recording():
-    """Stop recording and close CSV file"""
-    global is_recording, csv_file
-    if is_recording:
-        is_recording = False
-        csv_file.close()
-        start_button.config(state=tk.NORMAL)
-        stop_button.config(state=tk.DISABLED)
-        print(f"Recording stopped: {csv_filename}")
+    # New condition for detecting upright posture based on hip sensors (3 and 6)
+    # if percentages[2] > UPRIGHT_HIP_THRESHOLD and percentages[5] > UPRIGHT_HIP_THRESHOLD:
+    #     return "Correct Posture"
+    # if sum(percentages[i-1] for i in upright_sensors) < 10:
+    #     return "Correct Postures"
+    if sum(percentages[i-1] for i in left_sensors) > 50:
+        return "Incorrect Posture"
+    elif sum(percentages[i-1] for i in right_sensors) > 50:
+        return "Incorrect Posture"
+    elif sum(percentages[i-1] for i in forward_sensors) > 50:
+        return "Incorrect Posture"
+    elif sum(percentages[i-1] for i in back_sensors) > 50:
+        return "Incorrect Posture"
+
+    return "Correct Posture"
 
 
 def update(frame):
-    """Update the heatmap and log data if recording is active"""
-    global chair_layout, is_recording, csv_writer
-
+    """Update the heatmap and detect posture"""
+    global chair_layout, cbar, is_recording, csv_writer, heatmap
     try:
         response = requests.get(f"{NODEMCU_IP}{ENDPOINT}", timeout=3)
         if response.status_code == 200:
-            csv_data = response.text.strip()
-            sensor_values = csv_data.split(",")
-
+            sensor_values = list(map(float, response.text.strip().split(",")))
             if len(sensor_values) == len(SENSOR_LABELS):
-                sensor_values = [float(v) for v in sensor_values]
-
                 sensor_matrix = np.full_like(
                     chair_layout, np.nan, dtype=np.float64)
                 annot_matrix = np.full_like(chair_layout, "", dtype=object)
 
+                # Assign values to the correct sensor locations in the matrix
                 for i, sensor_index in enumerate(chair_layout.flatten()):
                     if sensor_index > 0:
                         value = sensor_values[sensor_index - 1]
                         sensor_matrix[np.where(
                             chair_layout == sensor_index)] = value
                         annot_matrix[np.where(
-                            chair_layout == sensor_index)] = f"S{sensor_index}: {value:.1f}"
+                            chair_layout == sensor_index)] = f"{value:.1f}"
 
-                # Update heatmap
+                # Remove previous heatmap and redraw with updated values
                 ax.clear()
                 ax.set_title("Real-Time Pressure Sensor Heatmap")
-                ax.set_xticks([])
-                ax.set_yticks([])
-                sns.heatmap(sensor_matrix, annot=annot_matrix, fmt="", cmap="RdYlGn_r",
-                            linewidths=1, linecolor="gray", cbar=False, ax=ax, vmin=0, vmax=10)
 
-                # Keep original color bar
-                ax.collections[0].colorbar = heatmap.collections[0].colorbar
+                heatmap = sns.heatmap(
+                    sensor_matrix, annot=annot_matrix, fmt="s", cmap="RdYlGn_r",
+                    linewidths=1, linecolor="gray", cbar=False, ax=ax, vmin=0, vmax=10
+                )
 
-                # Save data if recording
-                if is_recording and csv_writer:
-                    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                    csv_writer.writerow([timestamp] + sensor_values)
+                # Reuse the existing color bar (update instead of re-creating)
+                if cbar:
+                    cbar.update_normal(heatmap.collections[0])
+                else:
+                    cbar = heatmap.collections[0].colorbar
 
-        canvas.draw()  # Update Tkinter canvas
+                # Classify posture
+                posture = classify_posture(sensor_values)
+                posture_label.config(text=f"Detected: {posture}")
 
+                canvas.draw()
     except requests.RequestException as e:
         print(f"Warning: Request failed: {e}")
 
 
 # Animation for updating heatmap
 ani = FuncAnimation(fig, update, interval=1000)
-
-# Add Start and Stop buttons
-button_frame = tk.Frame(root)
-button_frame.pack(side=tk.BOTTOM, pady=10)
-
-start_button = tk.Button(button_frame, text="Start Recording",
-                         command=start_recording, fg="white", bg="green", font=("Arial", 12))
-start_button.pack(side=tk.LEFT, padx=10)
-
-stop_button = tk.Button(button_frame, text="Stop Recording", command=stop_recording,
-                        fg="white", bg="red", font=("Arial", 12), state=tk.DISABLED)
-stop_button.pack(side=tk.RIGHT, padx=10)
 
 # Run Tkinter main loop
 root.mainloop()
