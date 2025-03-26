@@ -8,7 +8,21 @@ from PyQt5.QtGui import QPixmap, QIcon, QFont
 from PyQt5.QtCore import Qt
 from features import Features, PostureDetector
 from datetime import datetime
+from matplotlib.figure import Figure
+from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+import numpy as np
+import matplotlib.animation as animation
+from scipy.ndimage import gaussian_filter
+import requests
+import data_collection  # Import data_collection.py
+import csv
+import sqlite3
+import posture_database
 
+
+
+NODEMCU_IP = "http://192.168.121.112"  # Ensure this matches your NodeMCU IP
+ENDPOINT = "/get_data"
 
 
 class UIHelper:
@@ -49,6 +63,7 @@ class HomePage(QWidget):
         self.detector.posture_updated.connect(self.update_posture_status)
         self.detector.notification_alert.connect(self.show_notification)
         self.init_ui()
+        self.setup_pressure_heatmap()
 
     def init_ui(self):
         main_layout = QHBoxLayout()
@@ -57,6 +72,74 @@ class HomePage(QWidget):
         main_layout.addLayout(left_layout)
         main_layout.addLayout(right_layout)
         self.setLayout(main_layout)
+
+    def setup_pressure_heatmap(self):
+        """Initialize the pressure heatmap using real-time data from sensors."""
+        self.ax = self.pressure_canvas.figure.add_subplot(111)
+
+        # Use the same 5x5 layout from data_collection.py for visualization
+        self.chair_layout = np.array([
+            [1,  0,  0,  0,  4],
+            [2,  0,  8,  0,  5],
+            [3,  0,  9,  0,  6],
+            [7,  0,  0,  0, 10],
+            [0, 11, 12, 13,  0]
+        ])
+
+        self.heatmap_data = np.full_like(self.chair_layout, np.nan, dtype=np.float64)  # Initialize as empty
+        if not hasattr(self, 'heatmap') or self.heatmap is None:
+            self.ax.clear()  # Clear any previous plot
+            self.heatmap_data = np.full_like(self.chair_layout, np.nan, dtype=np.float64)
+            self.heatmap = self.ax.imshow(self.heatmap_data, cmap="RdYlGn_r", interpolation="nearest", animated=True, vmin=0, vmax=10)
+
+            self.ax.set_xticks([])
+            self.ax.set_yticks([])
+
+            self.ani = animation.FuncAnimation(self.pressure_canvas.figure, self.update_pressure_heatmap, interval=1000)
+            self.pressure_canvas.figure.tight_layout()
+
+        # Hide axis ticks for clean display
+        self.ax.set_xticks([])
+        self.ax.set_yticks([])
+
+        # Start animation to update with real sensor data
+        self.ani = animation.FuncAnimation(self.pressure_canvas.figure, self.update_pressure_heatmap, interval=1000)
+
+        self.pressure_canvas.figure.tight_layout()
+
+    def generate_sample_pressure_data(self):
+        """Generate random pressure data with realistic sitting pressure distribution."""
+        pressure = np.zeros((20, 20))  # Empty heatmap
+
+        # Simulate higher pressure in seat and thigh regions
+        sensor_positions = [(5, 5), (5, 14), (10, 5), (10, 14), (15, 5), (15, 14)]  # Sample sensor locations
+        for x, y in sensor_positions:
+            pressure[x, y] = np.random.uniform(0.5, 1.0)  # Random pressure at sensors
+
+        # Smooth data to make it more natural
+        pressure = gaussian_filter(pressure, sigma=3)
+
+        return pressure
+
+    def update_pressure_heatmap(self, frame):
+        """Fetch real sensor data and update the heatmap."""
+        try:
+            response = requests.get(f"{NODEMCU_IP}{ENDPOINT}", timeout=3)
+            if response.status_code == 200:
+                csv_data = response.text.strip()
+                sensor_values = [float(v) for v in csv_data.split(",")]
+
+                if len(sensor_values) == 13:
+                    sensor_matrix = np.full_like(self.chair_layout, np.nan, dtype=np.float64)
+                    
+                    for i, sensor_index in enumerate(self.chair_layout.flatten()):
+                        if sensor_index > 0:
+                            sensor_matrix[np.where(self.chair_layout == sensor_index)] = sensor_values[sensor_index - 1]
+
+                    self.heatmap.set_data(sensor_matrix)
+                    self.pressure_canvas.draw()
+        except requests.RequestException as e:
+            print(f"Warning: Failed to get sensor data: {e}")
 
     def create_left_section(self):
         left_layout = QVBoxLayout()
@@ -73,10 +156,11 @@ class HomePage(QWidget):
             "Pressure Data", 10, (200, 16)))
 
         # Placeholder for displaying the heatmap of pressure data from the sensors
-        pressure_grid = UIHelper.create_label("", fixed_size=(200, 200))
-        pressure_grid.setStyleSheet(
-            "border: 1px solid #F1F1F1; border-radius: 8px")
-        left_layout.addWidget(pressure_grid)
+        self.pressure_layout = QVBoxLayout()
+        self.pressure_canvas = FigureCanvas(Figure(figsize=(3, 3)))  # Matplotlib Figure
+        self.pressure_layout.addWidget(self.pressure_canvas)
+        left_layout.addLayout(self.pressure_layout)
+
 
         # Current Posture
         left_layout.addWidget(UIHelper.create_label(
@@ -179,6 +263,7 @@ class HomePage(QWidget):
         # Append log message with timestamp
         self.log_text.append(f"[{current_time}] Detected posture: {posture}")
 
+
     def toggle_start_button(self):
         is_start = self.start_button.text() == "Start"
         self.start_button.setText("Stop" if is_start else "Start")
@@ -193,8 +278,37 @@ class HomePage(QWidget):
         
         if self.start_button.text() == "Stop":
             self.detector.start_detection()
+            data_collection.start_recording()
+
+            # Initialize heatmap only when "Start" is clicked
+            if self.heatmap is None:
+                self.setup_pressure_heatmap()
+            
         else:
             self.detector.stop_detection()
+            data_collection.stop_recording()
+
+            # Hide heatmap when "Stop" is pressed
+            if self.heatmap:
+                self.ax.clear()
+                self.heatmap = None
+                self.pressure_canvas.draw()
+
+    def export_posture_data_to_csv():
+        """Export posture data from the database to a CSV file."""
+        conn = sqlite3.connect("posture_data.db")
+        cursor = conn.cursor()
+
+        cursor.execute("SELECT * FROM posture_logs")  # Fetch all posture records
+        data = cursor.fetchall()
+
+        if data:
+            with open("posture_data.csv", mode="w", newline="") as file:
+                writer = csv.writer(file)
+                writer.writerow(["Time", "Posture", "Duration"])  # CSV header
+                writer.writerows(data)  # Write database records
+
+        conn.close()
 
 class GuidelinesPage(QWidget):
     def __init__(self, stacked_widget):
@@ -216,6 +330,13 @@ class PostSyncApp(QMainWindow):
         self.stacked_widget.addWidget(GuidelinesPage(self.stacked_widget))
 
         self.setCentralWidget(self.stacked_widget)
+    
+    def closeEvent(self, event):
+        """Export posture data to CSV when the application is closed."""
+        print("Exporting posture data to CSV before closing the application...")  # Debugging
+        posture_database.export_to_csv()  # Export posture logs to CSV
+        print("CSV export complete.")  # Debugging confirmation
+        event.accept()  # Ensures the application closes properly
 
 
 if __name__ == "__main__":

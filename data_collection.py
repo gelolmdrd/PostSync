@@ -52,14 +52,18 @@ csv_writer = None
 
 
 def start_recording():
-    """Start recording data to a CSV file"""
+    """Start recording data to a single CSV file"""
     global is_recording, csv_filename, csv_file, csv_writer
     if not is_recording:
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        csv_filename = f"pressure_data_{timestamp}.csv"
-        csv_file = open(csv_filename, mode='w', newline='')
+        csv_filename = "pressure_data.csv"  # Fixed filename
+        file_exists = os.path.isfile(csv_filename)  # Check if file exists
+
+        csv_file = open(csv_filename, mode='a', newline='')  # Open in append mode
         csv_writer = csv.writer(csv_file)
-        csv_writer.writerow(["Timestamp"] + SENSOR_LABELS)  # Write header
+
+        if not file_exists:
+            csv_writer.writerow(["Timestamp"] + SENSOR_LABELS)  # Write header only if file does not exist
+
         is_recording = True
         start_button.config(state=tk.DISABLED)
         stop_button.config(state=tk.NORMAL)
@@ -71,12 +75,12 @@ def stop_recording():
     global is_recording, csv_file
     if is_recording:
         is_recording = False
-        csv_file.close()
+        if csv_file:
+            csv_file.close()  # Close the file properly
         start_button.config(state=tk.NORMAL)
         stop_button.config(state=tk.DISABLED)
-        print(f"Recording stopped: {csv_filename}")
-
-
+        print("Recording stopped.")
+    
 def update(frame):
     """Update the heatmap and log data if recording is active"""
     global chair_layout, is_recording, csv_writer
@@ -114,18 +118,16 @@ def update(frame):
                 ax.collections[0].colorbar = heatmap.collections[0].colorbar
 
                 # Save data if recording
-                if is_recording and csv_writer:
+                if is_recording:
                     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                    csv_writer.writerow([timestamp] + sensor_values)
+                    with open("pressure_data.csv", mode='a', newline='') as csv_file:
+                        csv_writer = csv.writer(csv_file)
+                        csv_writer.writerow([timestamp] + sensor_values)
 
         canvas.draw()  # Update Tkinter canvas
 
     except requests.RequestException as e:
         print(f"Warning: Request failed: {e}")
-
-
-# Animation for updating heatmap
-ani = FuncAnimation(fig, update, interval=1000)
 
 # Add Start and Stop buttons
 button_frame = tk.Frame(root)
@@ -139,5 +141,7 @@ stop_button = tk.Button(button_frame, text="Stop Recording", command=stop_record
                         fg="white", bg="red", font=("Arial", 12), state=tk.DISABLED)
 stop_button.pack(side=tk.RIGHT, padx=10)
 
-# Run Tkinter main loop
-root.mainloop()
+
+if __name__ == "__main__":
+    ani = FuncAnimation(fig, update, interval=1000)
+    root.mainloop()

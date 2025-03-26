@@ -10,6 +10,8 @@ import time
 from plyer import notification
 from PyQt5.QtCore import pyqtSignal, QObject
 from collections import deque
+import posture_database
+
 
 # Load Machine Learning Model and Scaler
 model = joblib.load(os.path.join(os.path.dirname(__file__), "models", "svm.pkl"))
@@ -187,7 +189,8 @@ class PostureDetector(QObject):
 
             # Emit signal to update UI
             filtered_posture = self.apply_moving_average(pred)
-            self.posture_updated.emit(filtered_posture)
+            posture_database.save_posture(filtered_posture)  # Save to database
+            self.posture_updated.emit(filtered_posture)  # Notify UI
             self.check_posture_duration(filtered_posture)  # ✅ Use filtered posture for consistency
 
             time.sleep(1)  # Delay for stability
