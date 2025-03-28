@@ -5,6 +5,7 @@ import seaborn as sns
 import csv
 import os
 import tkinter as tk
+import requests
 from datetime import datetime
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.animation import FuncAnimation
@@ -12,6 +13,7 @@ from matplotlib.animation import FuncAnimation
 # NodeMCU Server IP (Change this to your actual IP)
 NODEMCU_IP = "http://192.168.121.112"
 ENDPOINT = "/get_data"
+sensor_error_logged = False
 
 SENSOR_LABELS = [
     "Sensor_1", "Sensor_2", "Sensor_3",
@@ -129,6 +131,24 @@ def update(frame):
     except requests.RequestException as e:
         print(f"Warning: Request failed: {e}")
 
+def fetch_sensor_data():
+    global sensor_error_logged
+    url = "http://192.168.121.112/get_data"
+    try:
+        response = requests.get(url, timeout=3)  # 3-second timeout
+        response.raise_for_status()  # Raise error for bad responses (4xx, 5xx)
+        data = response.text.strip()
+
+        # Reset flag if data is successfully retrieved
+        sensor_error_logged = False  
+        return data
+    except requests.RequestException:
+        # Log the warning only if it hasn't been logged yet
+        if not sensor_error_logged:
+            print("Warning: Failed to get sensor data. No sensor detected.")
+            sensor_error_logged = True  # Set flag to avoid multiple logs
+        return None
+    
 # Add Start and Stop buttons
 button_frame = tk.Frame(root)
 button_frame.pack(side=tk.BOTTOM, pady=10)

@@ -17,6 +17,8 @@ import posture_database
 model = joblib.load(os.path.join(os.path.dirname(__file__), "models", "svm.pkl"))
 scaler = joblib.load(os.path.join(os.path.dirname(__file__), "models", "scaler.pkl"))
 
+last_log_time = None  # Store the last logged timestam
+
 # Initialize MediaPipe Pose
 mp_pose = mp.solutions.pose
 pose = mp_pose.Pose(min_detection_confidence=0.5, min_tracking_confidence=0.5)
@@ -72,11 +74,11 @@ class PostureDetector(QObject):
         self.is_running = False
         self.thread = None
         self.notification_enabled = True  # Default to enabled
+        self.last_log_time = ""  # Track last logged second
         self.last_posture = None  # Track last detected posture
         self.posture_start_time = None  # Track when posture started
         self.last_notification = None  # Track last notification sent
-        self.posture_queue = deque(maxlen=5)  # Stores last 5 postures for filtering
-
+        self.posture_queue = deque(maxlen=1)  # Stores last 5 postures for filtering
 
     def start_detection(self):
         """Start posture detection in a separate thread."""
@@ -147,6 +149,10 @@ class PostureDetector(QObject):
     def run_pose_detection(self):
         """Continuously capture frames and process posture detection."""
         cap = cv2.VideoCapture(0)
+        cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # Reduce latency
+
+        global last_log_time  
+        last_log_time = None  # Ensure it's initialized properly
 
         while self.is_running:
             ret, frame = cap.read()
@@ -187,12 +193,19 @@ class PostureDetector(QObject):
                 else:
                     print(f"Feature mismatch: Expected 39, got {keypoints.shape[1]}")
 
-            # Emit signal to update UI
+            # Apply filtering to stabilize posture classification
             filtered_posture = self.apply_moving_average(pred)
             posture_database.save_posture(filtered_posture)  # Save to database
-            self.posture_updated.emit(filtered_posture)  # Notify UI
-            self.check_posture_duration(filtered_posture)  # ✅ Use filtered posture for consistency
 
-            time.sleep(1)  # Delay for stability
+            # **Fix duplicate logging**
+            current_time = time.strftime("%Y-%m-%d %H:%M:%S")  # Get timestamp
+            if last_log_time != current_time:  # Ensure only 1 log per second
+                last_log_time = current_time
+                self.posture_updated.emit(filtered_posture)  # Update UI log
+
+            self.check_posture_duration(filtered_posture)  # Check duration
+
+            time.sleep(0.1)  # Reduce delay for smoother updates
 
         cap.release()
+

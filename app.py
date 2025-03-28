@@ -1,7 +1,8 @@
 import sys
 import mediapipe as mp
+import os
 from PyQt5.QtWidgets import (
-    QApplication, QMainWindow, QWidget, QHBoxLayout, QVBoxLayout,
+    QApplication, QMainWindow, QWidget, QHBoxLayout, QVBoxLayout, QTabWidget, QScrollArea, QFrame,
     QLabel, QPushButton, QTextEdit, QCheckBox, QStackedWidget, QSpacerItem, QSizePolicy
 )
 from PyQt5.QtGui import QPixmap, QIcon, QFont
@@ -18,6 +19,7 @@ import data_collection  # Import data_collection.py
 import csv
 import sqlite3
 import posture_database
+
 
 
 
@@ -58,6 +60,8 @@ class UIHelper:
 class HomePage(QWidget):
     def __init__(self, stacked_widget):
         super().__init__()
+        self.stacked_widget = stacked_widget 
+
         self.features = Features()
         self.detector = PostureDetector()  # Initialize PostureDetector
         self.detector.posture_updated.connect(self.update_posture_status)
@@ -198,7 +202,8 @@ class HomePage(QWidget):
         left_controls.addWidget(UIHelper.create_label("Power", 12, (170, 16)))
         left_controls.addWidget(self.start_button)
         left_controls.addWidget(UIHelper.create_label("Info", 12, (170, 16)))
-        left_controls.addWidget(UIHelper.create_button("Guidelines"))
+        self.guidelines_button = UIHelper.create_button("Guidelines", callback=self.go_to_guidelines)
+        left_controls.addWidget(self.guidelines_button)
         bottom_layout.addLayout(left_controls)
 
         # Add spacing before the alerts section
@@ -209,6 +214,14 @@ class HomePage(QWidget):
 
         return bottom_layout
     
+    def show_guidelines(self):
+        self.guidelines_page = GuidelinesPage(self)
+        self.setCentralWidget(self.guidelines_page)
+
+    def go_to_guidelines(self):
+        """Switch to the guidelines page when the Guidelines button is clicked."""
+        self.stacked_widget.setCurrentWidget(self.stacked_widget.widget(1))  # ✅ Switch to GuidelinesPage
+
     def create_alerts_section(self):
         alerts_layout = QVBoxLayout()
         alerts_layout.addWidget(UIHelper.create_label("Alerts", 12, (170, 16)))
@@ -309,12 +322,71 @@ class HomePage(QWidget):
                 writer.writerows(data)  # Write database records
 
         conn.close()
-
+        
 class GuidelinesPage(QWidget):
-    def __init__(self, stacked_widget):
-        super().__init__()
-        self.setLayout(QVBoxLayout())
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.init_ui()
 
+    def init_ui(self):
+        main_layout = QVBoxLayout(self)  # Main layout for the page
+
+        # ✅ Create Tab Widget to contain images
+        tab_widget = QTabWidget(self)
+
+        # ✅ Create a scroll area for images inside the tab
+        scroll_area = QScrollArea(self)
+        scroll_area.setWidgetResizable(True)
+
+        scroll_widget = QWidget()
+        content_layout = QVBoxLayout(scroll_widget)
+
+        # ✅ Define image folder and files
+        image_folder = "guidelines"
+        image_files = ["1.png", "2.png", "3.png"]
+
+        for img_name in image_files:
+            img_path = os.path.join(image_folder, img_name)
+
+            if os.path.exists(img_path):
+                label = QLabel(self)
+                pixmap = QPixmap(img_path)
+
+                if not pixmap.isNull():
+                    label.setPixmap(pixmap)
+                    label.setScaledContents(True)
+                    label.setFixedSize(500, 500)  # ✅ Adjust this size if needed
+                    content_layout.addWidget(label)
+                else:
+                    print(f"⚠️ Error: Could not load image {img_path}")
+            else:
+                print(f"⚠️ Warning: Image {img_path} not found")
+
+        scroll_widget.setLayout(content_layout)
+        scroll_area.setWidget(scroll_widget)
+
+        # ✅ Add the scroll area inside the tab
+        tab_widget.addTab(scroll_area, "Guideline Images")
+
+        # ✅ Back Button (Lower Left)
+        back_button = QPushButton("Back")
+        back_button.setFixedSize(100, 40)  # Adjust size if needed
+        back_button.clicked.connect(self.go_back)  # Make sure this method is defined in the main app
+
+        # ✅ Create bottom layout for Back Button
+        bottom_layout = QHBoxLayout()
+        bottom_layout.addWidget(back_button)  # Left align button
+        bottom_layout.addStretch(1)  # Push everything else to the right
+
+        # ✅ Add widgets to the main layout
+        main_layout.addWidget(tab_widget)  # Images inside the tab
+        main_layout.addLayout(bottom_layout)  # Back button at the bottom left
+
+        self.setLayout(main_layout)
+
+    def go_back(self):
+        """Go back to the main detection page."""
+        self.parent().setCurrentIndex(0)  # Adjust based on your stacked widget index
 
 class PostSyncApp(QMainWindow):
     def __init__(self):
@@ -326,9 +398,13 @@ class PostSyncApp(QMainWindow):
         self.setContentsMargins(36, 24, 36, 24)
 
         self.stacked_widget = QStackedWidget()
-        self.stacked_widget.addWidget(HomePage(self.stacked_widget))
-        self.stacked_widget.addWidget(GuidelinesPage(self.stacked_widget))
 
+        self.home_page = HomePage(self.stacked_widget)
+        self.guidelines_page = GuidelinesPage(self.stacked_widget)  # ✅ Add this line
+
+        self.stacked_widget.addWidget(self.home_page)  # HomePage (index 0)
+        self.stacked_widget.addWidget(self.guidelines_page)  # GuidelinesPage (index 1) 
+        
         self.setCentralWidget(self.stacked_widget)
     
     def closeEvent(self, event):
