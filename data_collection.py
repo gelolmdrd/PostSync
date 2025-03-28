@@ -90,7 +90,7 @@ def classify_posture(sensor_values):
 
 
 def check_and_trigger_haptic(sensor_values):
-    """Triggers or stops haptic feedback based on posture detection"""
+    """Triggers haptic feedback when incorrect posture is detected"""
     global last_haptic_trigger_time, incorrect_posture_start_time, haptic_active
 
     posture = classify_posture(sensor_values)
@@ -105,19 +105,18 @@ def check_and_trigger_haptic(sensor_values):
                 try:
                     print("Triggering haptic feedback (1)")
                     requests.get(f"{NODEMCU_IP}{ENDPOINT_TRIGGER}?trigger=1")
+                    time.sleep(1)  # Short delay before turning off
+                    print("Turning off haptic feedback (0)")
+                    requests.get(f"{NODEMCU_IP}{ENDPOINT_TRIGGER}?trigger=0")
+
                     last_haptic_trigger_time = current_time
                     haptic_active = True
                 except requests.RequestException as e:
                     print(f"Warning: Haptic request failed: {e}")
+
     else:
         incorrect_posture_start_time = None  # Reset timer
-        if haptic_active:  # Send "0" only if haptic was previously on
-            try:
-                print("Turning off haptic feedback (0)")
-                requests.get(f"{NODEMCU_IP}{ENDPOINT_TRIGGER}?trigger=0")
-                haptic_active = False
-            except requests.RequestException as e:
-                print(f"Warning: Haptic stop request failed: {e}")
+        haptic_active = False
 
 
 def update(frame):
