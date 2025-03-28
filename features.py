@@ -208,4 +208,3 @@ class PostureDetector(QObject):
             time.sleep(0.1)  # Reduce delay for smoother updates
 
         cap.release()
-
