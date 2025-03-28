@@ -4,7 +4,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 import tkinter as tk
-import requests
 from datetime import datetime
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.animation import FuncAnimation
@@ -12,6 +11,14 @@ from matplotlib.animation import FuncAnimation
 # NodeMCU Server IP (Change this to your actual IP)
 NODEMCU_IP = "http://192.168.121.112"
 ENDPOINT = "/get_data"
+ENDPOINT_TRIGGER = "/haptic"
+
+HAPTIC_TRIGGER_INTERVAL = 10  # Seconds before another haptic trigger
+HAPTIC_DETECTION_TIME = 10    # Posture must be incorrect for 10 sec before triggering
+last_haptic_trigger_time = 0  # Stores last trigger time
+incorrect_posture_start_time = None  # Start time for incorrect posture
+haptic_active = False  # Track if haptic feedback is currently on
+
 
 SENSOR_LABELS = [
     "Sensor_1", "Sensor_2", "Sensor_3",
@@ -163,19 +170,9 @@ def update(frame):
     except requests.RequestException as e:
         print(f"Warning: Request failed: {e}")
 
-# Add Start and Stop buttons
-button_frame = tk.Frame(root)
-button_frame.pack(side=tk.BOTTOM, pady=10)
 
-start_button = tk.Button(button_frame, text="Start Recording",
-                         command=start_recording, fg="white", bg="green", font=("Arial", 12))
-start_button.pack(side=tk.LEFT, padx=10)
+# Animation for updating heatmap
+ani = FuncAnimation(fig, update, interval=500)
 
-stop_button = tk.Button(button_frame, text="Stop Recording", command=stop_recording,
-                        fg="white", bg="red", font=("Arial", 12), state=tk.DISABLED)
-stop_button.pack(side=tk.RIGHT, padx=10)
-
-
-if __name__ == "__main__":
-    ani = FuncAnimation(fig, update, interval=1000)
-    root.mainloop()
+# Run Tkinter main loop
+root.mainloop()
