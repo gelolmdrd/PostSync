@@ -7,6 +7,10 @@ import tkinter as tk
 from datetime import datetime
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.animation import FuncAnimation
+from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+from PyQt5.QtWidgets import QLabel
+import tkinter as tk
+import threading
 
 # NodeMCU Server IP (Change this to your actual IP)
 NODEMCU_IP = "http://192.168.121.112"
@@ -18,7 +22,7 @@ HAPTIC_DETECTION_TIME = 10    # Posture must be incorrect for 10 sec before trig
 last_haptic_trigger_time = 0  # Stores last trigger time
 incorrect_posture_start_time = None  # Start time for incorrect posture
 haptic_active = False  # Track if haptic feedback is currently on
-
+recording = False
 
 SENSOR_LABELS = [
     "Sensor_1", "Sensor_2", "Sensor_3",
@@ -39,10 +43,6 @@ chair_layout = np.array([
 # Thresholds
 USER_DETECTION_THRESHOLD = 1.0
 
-# Initialize GUI
-root = tk.Tk()
-root.title("Real-Time Pressure Sensor Heatmap")
-
 # Create Matplotlib figure for the heatmap
 fig, ax = plt.subplots(figsize=(6, 6))
 cbar = None  # Variable to hold the color bar reference
@@ -54,14 +54,31 @@ heatmap = sns.heatmap(dummy_matrix, annot=False, cmap="RdYlGn_r",
 cbar = heatmap.collections[0].colorbar  # Store the color bar
 
 # Embedding Matplotlib figure inside Tkinter
-canvas = FigureCanvasTkAgg(fig, master=root)
-canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+canvas = FigureCanvas(fig)  # ✅ Use PyQt-compatible canvas
 
 # Label for detected posture
-posture_label = tk.Label(root, text="Detecting...", font=("Arial", 14, "bold"))
-posture_label.pack(pady=10)
 
+posture_label = QLabel("Detecting...")
+posture_label.setStyleSheet("font-size: 14px; font-weight: bold; font-family: Arial;")
 
+def start_recording():
+    """Starts collecting data and updating the application."""
+    global recording
+    recording = True
+
+    def collect_data():
+        while recording:
+            update()  # Calls the update function to collect data
+            time.sleep(0.5)  # Adjust sleep time to match data update rate
+
+    data_thread = threading.Thread(target=collect_data, daemon=True)
+    data_thread.start()
+
+def stop_recording():
+    """Stops collecting data."""
+    global recording
+    recording = False
+    
 def classify_posture(sensor_values):
     """Classifies posture based on sensor data"""
     total_force = sum(sensor_values)
@@ -172,6 +189,3 @@ def update(frame):
 
 # Animation for updating heatmap
 ani = FuncAnimation(fig, update, interval=500)
-
-# Run Tkinter main loop
-root.mainloop()
