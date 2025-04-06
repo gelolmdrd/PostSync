@@ -28,7 +28,7 @@ def save_posture(posture):
     cursor.execute("INSERT INTO posture_logs (timestamp, posture) VALUES (?, ?)", (timestamp, posture))
     conn.commit()
     conn.close()
-    print(f"[DATABASE] Saved posture: {posture} at {timestamp}")
+    print(f"[DATABASE] Saved vision posture: {posture} at {timestamp}")
 
 def export_to_csv():
     """Export posture data from the database to a CSV file."""

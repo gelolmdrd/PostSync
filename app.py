@@ -11,19 +11,43 @@ from features import Features, PostureDetector
 from datetime import datetime
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+from PyQt5.QtCore import QTimer
 import numpy as np
 import matplotlib.animation as animation
 from scipy.ndimage import gaussian_filter
+import threading
 import requests
-import data_collection  # Import data_collection.py
+import data_collection # Import data_collection.py
 import csv
 import sqlite3
 import posture_database
+import traceback
+from features import get_latest_vision_posture
+from data_collection import get_latest_pressure_posture
 
+def print_current_postures():
+    print("Vision Posture:", get_latest_vision_posture())
+    print("Pressure Posture:", get_latest_pressure_posture())
+    print("Final Posture:", print_final_posture())
 
+def get_final_posture_classification(vision_posture, pressure_posture):
+    vision_posture = get_latest_vision_posture()
+    pressure_posture = get_latest_pressure_posture()
+    if vision_posture == "No Pose Detected":
+        return "No Person Detected"
+    elif vision_posture == "Upright" and pressure_posture == "Correct Posture":
+        return "Correct Posture"
+    else:
+        return "Incorrect Posture"
 
+def print_final_posture():
+    vision = get_latest_vision_posture()
+    pressure = get_latest_pressure_posture()
+    final_posture = get_final_posture_classification(vision, pressure)
 
-NODEMCU_IP = "http://192.168.121.112"  # Ensure this matches your NodeMCU IP
+    return final_posture
+
+NODEMCU_IP = "http://192.168.43.57"  # Ensure this matches your NodeMCU IP
 ENDPOINT = "/get_data"
 
 
@@ -66,6 +90,8 @@ class HomePage(QWidget):
         self.detector = PostureDetector()  # Initialize PostureDetector
         self.detector.posture_updated.connect(self.update_posture_status)
         self.detector.notification_alert.connect(self.show_notification)
+        self.vision_posture = "Unknown"  # Store the last detected vision posture
+        self.pressure_posture = "Unknown"  # Store the last detected pressure posture
         self.init_ui()
         self.setup_pressure_heatmap()
 
@@ -78,10 +104,11 @@ class HomePage(QWidget):
         self.setLayout(main_layout)
 
     def setup_pressure_heatmap(self):
-        """Initialize the pressure heatmap using real-time data from sensors."""
+        """Initialize the pressure heatmap but do NOT start animation until Start is clicked."""
         self.ax = self.pressure_canvas.figure.add_subplot(111)
+        # ✅ Do NOT start animation automatically
+        self.ani = None
 
-        # Use the same 5x5 layout from data_collection.py for visualization
         self.chair_layout = np.array([
             [1,  0,  0,  0,  4],
             [2,  0,  8,  0,  5],
@@ -90,40 +117,20 @@ class HomePage(QWidget):
             [0, 11, 12, 13,  0]
         ])
 
-        self.heatmap_data = np.full_like(self.chair_layout, np.nan, dtype=np.float64)  # Initialize as empty
+        self.heatmap_data = np.full_like(self.chair_layout, np.nan, dtype=np.float64)
+
         if not hasattr(self, 'heatmap') or self.heatmap is None:
-            self.ax.clear()  # Clear any previous plot
-            self.heatmap_data = np.full_like(self.chair_layout, np.nan, dtype=np.float64)
+            self.ax.clear()
             self.heatmap = self.ax.imshow(self.heatmap_data, cmap="RdYlGn_r", interpolation="nearest", animated=True, vmin=0, vmax=10)
 
             self.ax.set_xticks([])
-            self.ax.set_yticks([])
-
-            self.ani = animation.FuncAnimation(self.pressure_canvas.figure, self.update_pressure_heatmap, interval=1000)
-            self.pressure_canvas.figure.tight_layout()
-
-        # Hide axis ticks for clean display
-        self.ax.set_xticks([])
-        self.ax.set_yticks([])
-
-        # Start animation to update with real sensor data
-        self.ani = animation.FuncAnimation(self.pressure_canvas.figure, self.update_pressure_heatmap, interval=1000)
+            self.ax.set_yticks([])  
 
         self.pressure_canvas.figure.tight_layout()
-
-    def generate_sample_pressure_data(self):
-        """Generate random pressure data with realistic sitting pressure distribution."""
-        pressure = np.zeros((20, 20))  # Empty heatmap
-
-        # Simulate higher pressure in seat and thigh regions
-        sensor_positions = [(5, 5), (5, 14), (10, 5), (10, 14), (15, 5), (15, 14)]  # Sample sensor locations
-        for x, y in sensor_positions:
-            pressure[x, y] = np.random.uniform(0.5, 1.0)  # Random pressure at sensors
-
-        # Smooth data to make it more natural
-        pressure = gaussian_filter(pressure, sigma=3)
-
-        return pressure
+        
+    def run_data_collection():
+        """Start data collection as a background process."""
+        data_collection.start_recording()  # Ensure this function starts the haptic feedback loop
 
     def update_pressure_heatmap(self, frame):
         """Fetch real sensor data and update the heatmap."""
@@ -141,7 +148,8 @@ class HomePage(QWidget):
                             sensor_matrix[np.where(self.chair_layout == sensor_index)] = sensor_values[sensor_index - 1]
 
                     self.heatmap.set_data(sensor_matrix)
-                    self.pressure_canvas.draw()
+                    self.pressure_canvas.figure.canvas.draw_idle()
+
         except requests.RequestException as e:
             print(f"Warning: Failed to get sensor data: {e}")
 
@@ -268,14 +276,18 @@ class HomePage(QWidget):
     
     def update_posture_status(self, posture):
         """Update the UI with the detected posture and log it with a timestamp."""
-        self.posture_status.setText(posture)
-        
+        self.posture_status.setText(print_final_posture())
+
         # Get current date and time
         current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        
+            
         # Append log message with timestamp
         self.log_text.append(f"[{current_time}] Detected posture: {posture}")
 
+    def log_posture(self, source, posture):
+        """Append original posture readings to the logs."""
+        current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        self.log_text.append(f"[{current_time}] {source} detected: {posture}")  # Keep detailed log
 
     def toggle_start_button(self):
         is_start = self.start_button.text() == "Start"
@@ -286,26 +298,26 @@ class HomePage(QWidget):
         )
 
     def handle_start(self):
-        """Handles the Start/Stop button click."""
         self.toggle_start_button()
-        
+
         if self.start_button.text() == "Stop":
             self.detector.start_detection()
             data_collection.start_recording()
 
-            # Initialize heatmap only when "Start" is clicked
             if self.heatmap is None:
                 self.setup_pressure_heatmap()
-            
+
+            if self.ani is None:
+                # Run animation update using PyQt's main event loop
+                self.timer = QTimer()
+                self.timer.timeout.connect(lambda: self.update_pressure_heatmap(None))
+                self.timer.start(1000)  # Update every second
+
         else:
             self.detector.stop_detection()
             data_collection.stop_recording()
-
-            # Hide heatmap when "Stop" is pressed
-            if self.heatmap:
-                self.ax.clear()
-                self.heatmap = None
-                self.pressure_canvas.draw()
+            if hasattr(self, 'timer'):
+                self.timer.stop()  # Stop the timer when stopping
 
     def export_posture_data_to_csv():
         """Export posture data from the database to a CSV file."""
@@ -410,6 +422,8 @@ class PostSyncApp(QMainWindow):
     def closeEvent(self, event):
         """Export posture data to CSV when the application is closed."""
         print("Exporting posture data to CSV before closing the application...")  # Debugging
+        print_current_postures()
+        print_final_posture()
         posture_database.export_to_csv()  # Export posture logs to CSV
         print("CSV export complete.")  # Debugging confirmation
         event.accept()  # Ensures the application closes properly
