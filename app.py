@@ -21,8 +21,6 @@ import sqlite3
 import posture_database
 
 
-
-
 NODEMCU_IP = "http://192.168.121.112"  # Ensure this matches your NodeMCU IP
 ENDPOINT = "/get_data"
 
