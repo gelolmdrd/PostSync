@@ -11,7 +11,11 @@ from plyer import notification
 from PyQt5.QtCore import pyqtSignal, QObject
 from collections import deque
 import posture_database
+import warnings
 
+warnings.filterwarnings("ignore", category=UserWarning)
+
+latest_vision_posture = "Unknown"
 
 # Load Machine Learning Model and Scaler
 model = joblib.load(os.path.join(os.path.dirname(__file__), "models", "svm.pkl"))
@@ -22,7 +26,6 @@ last_log_time = None  # Store the last logged timestam
 # Initialize MediaPipe Pose
 mp_pose = mp.solutions.pose
 pose = mp_pose.Pose(min_detection_confidence=0.5, min_tracking_confidence=0.5)
-
 # Mapping of posture labels
 labels = {
     0: "Upright",
@@ -98,7 +101,7 @@ class PostureDetector(QObject):
     
     def check_posture_duration(self, current_posture):
         """Tracks how long the user maintains a posture and triggers notifications."""
-        print(f"Current posture detected: {current_posture}")  # Debugging step
+        #print(f"Current posture detected: {current_posture}")  # Debugging step
 
         good_posture = "Upright"
         bad_postures = {"Leaning Forward", "Leaning Backward", "Leaning Left", "Leaning Right"}
@@ -148,6 +151,7 @@ class PostureDetector(QObject):
 
     def run_pose_detection(self):
         """Continuously capture frames and process posture detection."""
+        global latest_vision_posture
         cap = cv2.VideoCapture(0)
         cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # Reduce latency
 
@@ -201,6 +205,7 @@ class PostureDetector(QObject):
             current_time = time.strftime("%Y-%m-%d %H:%M:%S")  # Get timestamp
             if last_log_time != current_time:  # Ensure only 1 log per second
                 last_log_time = current_time
+                latest_vision_posture = filtered_posture
                 self.posture_updated.emit(filtered_posture)  # Update UI log
 
             self.check_posture_duration(filtered_posture)  # Check duration
@@ -208,3 +213,6 @@ class PostureDetector(QObject):
             time.sleep(0.1)  # Reduce delay for smoother updates
 
         cap.release()
+
+def get_latest_vision_posture():
+    return latest_vision_posture
