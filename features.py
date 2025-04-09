@@ -86,7 +86,7 @@ class PostureDetector(QObject):
         super().__init__()
         self.is_running = False
         self.thread = None
-        self.notification_enabled = True  # Default to enabled
+        self.notification_enabled = False  # Default to enabled
         self.last_log_time = ""  # Track last logged second
         self.last_posture = None  # Track last detected posture
         self.posture_start_time = None  # Track when posture started
@@ -175,7 +175,9 @@ class PostureDetector(QObject):
                 continue
 
             frame = cv2.flip(frame, 1)  # Mirror effect for natural interaction
-            image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            image = frame.copy()
+            rgb_image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            results = pose.process(rgb_image)
             results = pose.process(image)
 
             pred = "No Pose Detected"
