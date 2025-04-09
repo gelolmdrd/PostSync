@@ -43,7 +43,7 @@ chair_layout = np.array([
 ])
 
 # Thresholds
-USER_DETECTION_THRESHOLD = 1.0
+USER_DETECTION_THRESHOLD = 3.0
 
 # Create Matplotlib figure for the heatmap
 fig, ax = plt.subplots(figsize=(6, 6))
@@ -96,7 +96,7 @@ def classify_posture(sensor_values, ui_callback=None):
         }
         posture = "Correct Posture"  # Default to correct posture
         for indices in sensor_groups.values():
-            if sum(percentages[i] for i in indices) > 50:
+            if sum(percentages[i] for i in indices) > 55:
                 posture = "Incorrect Posture"
                 break
 
@@ -203,6 +203,7 @@ def update(frame):
         if not pressure_sensor_error_notified:
             print(f"⚠️ Warning: Pressure sensor is not responding. Error: {e}")
             pressure_sensor_error_notified = True
+    print(f"Current Pressure Posture detected: {latest_pressure_posture}")
 
 # ✅ Simple getter
 def get_latest_pressure_posture():

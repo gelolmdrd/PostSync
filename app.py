@@ -34,7 +34,7 @@ def print_current_postures():
 def get_final_posture_classification(vision_posture, pressure_posture):
     vision_posture = get_latest_vision_posture()
     pressure_posture = get_latest_pressure_posture()
-    if vision_posture == "No Pose Detected":
+    if vision_posture == "No Pose Detected" or pressure_posture == "No User Detected":
         return "No Person Detected"
     elif vision_posture == "Upright" and pressure_posture == "Correct Posture":
         return "Correct Posture"
