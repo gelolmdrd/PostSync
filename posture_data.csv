@@ -3491,6 +3491,8 @@ id,timestamp,posture
 3490,2025-03-28 13:13:50,Leaning Forward
 3491,2025-03-28 13:13:50,Leaning Right
 3492,2025-03-28 13:13:50,Leaning Right
+<<<<<<< HEAD
+=======
 3493,2025-03-28 14:52:57,Leaning Backward
 3494,2025-03-28 14:52:57,Leaning Backward
 3495,2025-03-28 14:52:57,Leaning Backward
@@ -22243,6 +22245,7 @@ id,timestamp,posture
 22242,2025-04-06 20:17:24,Leaning Backward
 22243,2025-04-06 20:17:24,Leaning Backward
 22244,2025-04-06 20:17:24,Leaning Backward
+<<<<<<< HEAD
 22245,2025-04-06 20:20:43,Leaning Right
 22246,2025-04-06 20:20:43,Leaning Right
 22247,2025-04-06 20:20:43,Leaning Right
@@ -55451,3 +55454,6 @@ id,timestamp,posture
 55450,2025-04-07 19:00:14,Leaning Right
 55451,2025-04-07 19:00:15,Leaning Right
 55452,2025-04-07 19:00:15,Leaning Right
+=======
+>>>>>>> a4d87647b6b00a0680c1bc995106667a317bf33b
+>>>>>>> e1cd35ebea670e35ad82887b01a423c573a2960d
