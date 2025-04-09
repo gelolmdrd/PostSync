@@ -2,6 +2,7 @@ import sys
 import os
 import cv2
 import mediapipe as mp
+import pandas as pd
 import numpy as np
 import joblib
 import threading
@@ -42,6 +43,15 @@ required_landmarks = [
     "left_ear", "right_ear", "mouth_left", "mouth_right",
     "left_shoulder", "right_shoulder"
 ]
+
+# Variables for single-subject tracking
+subject_id = None
+bbox = None  # Bounding box for the tracked subject
+tracking_initialized = False
+
+# Column names for keypoints
+feature_names = [
+    f"{landmark}_{axis}" for landmark in required_landmarks for axis in ['x', 'y', 'z']]
 
 class Features:
     """Handles the application's backend logic."""
@@ -151,6 +161,7 @@ class PostureDetector(QObject):
 
     def run_pose_detection(self):
         """Continuously capture frames and process posture detection."""
+        global tracking_initialized
         global latest_vision_posture
         cap = cv2.VideoCapture(0)
         cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # Reduce latency
@@ -173,29 +184,44 @@ class PostureDetector(QObject):
                 landmarks = results.pose_landmarks.landmark
                 keypoints = []
 
-                # Extract required landmarks
+                # Compute bounding box around the detected pose
+                x_min = min(lm.x for lm in landmarks)
+                y_min = min(lm.y for lm in landmarks)
+                x_max = max(lm.x for lm in landmarks)
+                y_max = max(lm.y for lm in landmarks)
+
+                # Adjust the bounding box to include some extra space above the head
+                y_min = max(0, y_min - 0.2)  # Shift the top boundary upwards by 20%
+
+                new_bbox = (int(x_min * frame.shape[1]), int(y_min * frame.shape[0]),
+                            int((x_max - x_min) * frame.shape[1]), int((y_max - y_min) * frame.shape[0]))
+
+                if not tracking_initialized:
+                    subject_id = 1  # Assign an ID to the first detected person
+                    bbox = new_bbox
+                    tracking_initialized = True
+                else:
+                    bbox = new_bbox  # Continuously update the bounding box to track movement
+
+                # Ensure keypoints are extracted only from the tracked subject
+                keypoints = []
                 for landmark_name in required_landmarks:
-                    lm = getattr(mp_pose.PoseLandmark, landmark_name.upper(), None)
-                    if lm is not None and lm in mp_pose.PoseLandmark:
-                        keypoints.extend([
-                            landmarks[lm].x if landmarks[lm] else 0.0,
-                            landmarks[lm].y if landmarks[lm] else 0.0,
-                            landmarks[lm].z if landmarks[lm] else 0.0
-                        ])
-                    else:
-                        keypoints.extend([0.0, 0.0, 0.0])  # Default values for missing landmarks
+                    lm = getattr(mp_pose.PoseLandmark, landmark_name.upper())
+                    keypoints.extend(
+                        [landmarks[lm].x, landmarks[lm].y, landmarks[lm].z])
 
-                keypoints = np.array(keypoints).reshape(1, -1)
+                if keypoints:
+                    keypoints = np.array(keypoints).reshape(1, -1)
+                    keypoints_df = pd.DataFrame(keypoints, columns=feature_names)
 
-                if keypoints.shape[1] == 39:
                     try:
-                        keypoints = scaler.transform(keypoints)
-                        pred_label = model.predict(keypoints)[0]
+                        keypoints_scaled = scaler.transform(keypoints_df)
+                        pred_label = model.predict(keypoints_scaled)[0]
+                        pred_probs = model.predict_proba(keypoints_scaled)[0]
                         pred = labels.get(pred_label, "Unknown Posture")
+                        prob = pred_probs[pred_label]
                     except Exception as e:
                         print(f"Error during prediction: {e}")
-                else:
-                    print(f"Feature mismatch: Expected 39, got {keypoints.shape[1]}")
 
             # Apply filtering to stabilize posture classification
             filtered_posture = self.apply_moving_average(pred)
