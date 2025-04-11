@@ -85,6 +85,10 @@ def stop_recording():
 def classify_posture(sensor_values, ui_callback=None):
     """Classifies posture based on sensor data and updates UI"""
     total_force = sum(sensor_values)
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+    print(f"[INFO][{timestamp}] Raw Sensor Values: {sensor_values}")
+    print(f"[INFO][{timestamp}] Total Force: {total_force:.2f}")
+    
     if total_force < USER_DETECTION_THRESHOLD:
         posture = "No User Detected"
     else:
@@ -95,6 +99,18 @@ def classify_posture(sensor_values, ui_callback=None):
             "forward": [0, 1, 2, 3, 4, 5],
             "back": [6, 9, 10, 11, 12]
         }
+        
+        # Calculate zone pressure distributions
+        zone_distribution = {
+            zone: sum(percentages[i] for i in indices)
+            for zone, indices in sensor_groups.items()
+        }
+
+        # Log the zone distribution
+        print("[INFO][{timestamp}] Zone Pressure Distribution:")
+        for zone, pct in zone_distribution.items():
+            print(f"{zone.capitalize()}: {pct:.2f}%")
+        
         posture = "Correct Posture"  # Default to correct posture
         for indices in sensor_groups.values():
             if sum(percentages[i] for i in indices) > 55:
