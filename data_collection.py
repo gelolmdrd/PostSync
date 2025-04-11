@@ -11,14 +11,15 @@ from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from PyQt5.QtWidgets import QLabel
 import tkinter as tk
 import threading
+from datetime import datetime
 
 # NodeMCU Server IP (Change this to your actual IP)
 NODEMCU_IP = "http://192.168.43.57"
 ENDPOINT = "/get_data"
 ENDPOINT_TRIGGER = "/haptic"
 
-HAPTIC_TRIGGER_INTERVAL = 10  # Seconds before another haptic trigger
-HAPTIC_DETECTION_TIME = 10    # Posture must be incorrect for 10 sec before triggering
+HAPTIC_TRIGGER_INTERVAL = 0  # Seconds before another haptic trigger
+HAPTIC_DETECTION_TIME = 30    # Posture must be incorrect for 10 sec before triggering
 last_haptic_trigger_time = 0  # Stores last trigger time
 incorrect_posture_start_time = None  # Start time for incorrect posture
 haptic_active = False  # Track if haptic feedback is currently on
@@ -109,8 +110,10 @@ def classify_posture(sensor_values, ui_callback=None):
 
     return posture
 
+import threading
+
 def check_and_trigger_haptic(sensor_values):
-    """Triggers or stops haptic feedback based on posture detection"""
+    """Triggers haptic feedback as a pulse when incorrect posture is detected."""
     global last_haptic_trigger_time, incorrect_posture_start_time, haptic_active
 
     posture = classify_posture(sensor_values)
@@ -123,21 +126,29 @@ def check_and_trigger_haptic(sensor_values):
         if current_time - incorrect_posture_start_time >= HAPTIC_DETECTION_TIME:
             if current_time - last_haptic_trigger_time >= HAPTIC_TRIGGER_INTERVAL:
                 try:
-                    print("Triggering haptic feedback (1)")
+                    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+                    print(f"[{timestamp}]" "Triggering haptic feedback (1)")
                     requests.get(f"{NODEMCU_IP}{ENDPOINT_TRIGGER}?trigger=1")
-                    last_haptic_trigger_time = current_time
                     haptic_active = True
+                    last_haptic_trigger_time = current_time
+
+                    # Turn off haptic after 100ms (0.1s) without blocking
+                    def stop_haptic():
+                        try:
+                            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+                            print(f"[{timestamp}]" "Turning off haptic feedback (0)")
+                            requests.get(f"{NODEMCU_IP}{ENDPOINT_TRIGGER}?trigger=0")
+                            haptic_active = False
+                        except requests.RequestException as e:
+                            print(f"Warning: Haptic stop request failed: {e}")
+
+                    threading.Timer(0.1, stop_haptic).start()
+
                 except requests.RequestException as e:
                     print(f"Warning: Haptic request failed: {e}")
     else:
         incorrect_posture_start_time = None  # Reset timer
-        if haptic_active:  # Send "0" only if haptic was previously on
-            try:
-                print("Turning off haptic feedback (0)")
-                requests.get(f"{NODEMCU_IP}{ENDPOINT_TRIGGER}?trigger=0")
-                haptic_active = False
-            except requests.RequestException as e:
-                print(f"Warning: Haptic stop request failed: {e}")
+
 
 def update_posture_in_app(posture, parent_widget=None):
     """Update posture in the UI."""
@@ -145,10 +156,10 @@ def update_posture_in_app(posture, parent_widget=None):
 
     if parent_widget and isinstance(parent_widget, HomePage):
         parent_widget.update_pressure_posture(posture)
-
+posture = "unknown"
 def update(frame):
     """Update the heatmap and detect posture"""
-    global chair_layout, cbar, heatmap
+    global chair_layout, cbar, heatmap, posture
     global pressure_sensor_error_notified  # Track if error was already shown
 
     try:
@@ -203,7 +214,8 @@ def update(frame):
         if not pressure_sensor_error_notified:
             print(f"⚠️ Warning: Pressure sensor is not responding. Error: {e}")
             pressure_sensor_error_notified = True
-    print(f"Current Pressure Posture detected: {latest_pressure_posture}")
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+    print(f"[{timestamp}] Current Pressure Posture detected: {posture}")
 
 # ✅ Simple getter
 def get_latest_pressure_posture():

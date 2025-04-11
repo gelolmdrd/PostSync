@@ -11,6 +11,7 @@ import time
 from plyer import notification
 from PyQt5.QtCore import pyqtSignal, QObject
 from collections import deque
+from datetime import datetime
 import posture_database
 import warnings
 
@@ -91,7 +92,21 @@ class PostureDetector(QObject):
         self.last_posture = None  # Track last detected posture
         self.posture_start_time = None  # Track when posture started
         self.last_notification = None  # Track last notification sent
+        self.frame_counter = 0  # Tracks number of processed frames
         self.posture_queue = deque(maxlen=1)  # Stores last 5 postures for filtering
+
+        self.screenshot_counts = {
+            "Upright": 0,
+            "Leaning Right": 0,
+            "Leaning Left": 0,
+            "Leaning Backward": 0,
+            "Leaning Forward": 0,
+            "No Pose Detected": 0
+        }
+
+        self.max_screenshots = 150  # Max screenshots per posture
+        self.screenshot_dir = os.path.join(os.getcwd(), "screenshots")
+        os.makedirs(self.screenshot_dir, exist_ok=True)
 
     def start_detection(self):
         """Start posture detection in a separate thread."""
@@ -107,51 +122,6 @@ class PostureDetector(QObject):
     def enable_notifications(self, state):
         """Enable or disable pop-up notifications."""
         self.notification_enabled = state
-
-    
-    def check_posture_duration(self, current_posture):
-        """Tracks how long the user maintains a posture and triggers notifications."""
-        #print(f"Current posture detected: {current_posture}")  # Debugging step
-
-        good_posture = "Upright"
-        bad_postures = {"Leaning Forward", "Leaning Backward", "Leaning Left", "Leaning Right"}
-
-        # If posture changed, reset the timer
-        if current_posture != self.last_posture:
-            self.last_posture = current_posture
-            self.posture_start_time = time.time()
-            self.last_notification = None  # Reset notification tracker ✅
-            print(f"New posture detected. Reset timer.")  # Debugging step
-
-        elapsed_time = time.time() - self.posture_start_time
-        print(f"Elapsed time: {elapsed_time:.2f} seconds")  # Debugging step
-
-        # Send notification ONLY if it hasn't been sent yet
-        if current_posture == good_posture and elapsed_time >= 4 and self.last_notification != "good":
-            print("✅ Good posture notification triggered!")  # Debugging step
-            self.send_notification("Good Posture! Keep It Up.")
-            self.last_notification = "good"  # ✅ Prevent repeated alerts
-
-        elif current_posture in bad_postures and elapsed_time >= 15 and self.last_notification != "bad":
-            print("❌ Bad posture notification triggered!")  # Debugging step
-            self.send_notification("Bad Posture! Fix your sitting position.")
-            self.last_notification = "bad"  # ✅ Prevent repeated alerts
-
-
-    def send_notification(self, message):
-        """Sends a desktop notification if enabled."""
-        print(f"Sending notification: {message}")  # Debugging step
-        self.notification_alert.emit(message)  # Update UI log
-        
-        if self.notification_enabled:  # Only show pop-up if enabled
-            print("Notification enabled, displaying popup...")  # Debugging step
-            notification.notify(
-                title="Posture Alert",
-                message=message,
-                timeout=5
-            )
-        else:
-            print("Notification is disabled in UI.")  # Debugging step
 
     def apply_moving_average(self, new_posture):
         """Update queue and return the most frequent posture."""
@@ -178,7 +148,6 @@ class PostureDetector(QObject):
             image = frame.copy()
             rgb_image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             results = pose.process(rgb_image)
-            results = pose.process(image)
 
             pred = "No Pose Detected"
 
@@ -227,20 +196,90 @@ class PostureDetector(QObject):
 
             # Apply filtering to stabilize posture classification
             filtered_posture = self.apply_moving_average(pred)
-            posture_database.save_posture(filtered_posture)  # Save to database
 
-            # **Fix duplicate logging**
-            current_time = time.strftime("%Y-%m-%d %H:%M:%S")  # Get timestamp
-            if last_log_time != current_time:  # Ensure only 1 log per second
-                last_log_time = current_time
-                latest_vision_posture = filtered_posture
-                self.posture_updated.emit(filtered_posture)  # Update UI log
+            # Initialize drawing utils
+            mp_drawing = mp.solutions.drawing_utils
 
-            self.check_posture_duration(filtered_posture)  # Check duration
+            # Draw pose landmarks on the image (only if landmarks exist)
+            if results.pose_landmarks:
+                mp_drawing.draw_landmarks(
+                    image,
+                    results.pose_landmarks,
+                    mp.solutions.pose.POSE_CONNECTIONS,
+                    mp_drawing.DrawingSpec(color=(0, 255, 0), thickness=2, circle_radius=2),
+                    mp_drawing.DrawingSpec(color=(255, 0, 0), thickness=2)
+                )
+
+            # Put the posture label as overlay text
+            cv2.putText(image, f"Posture: {filtered_posture}", (10, 30),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 255), 2, cv2.LINE_AA)
+
+            # Save the screenshot
+            if filtered_posture in self.screenshot_counts and self.screenshot_counts[filtered_posture] < self.max_screenshots:
+                posture_folder = os.path.join(self.screenshot_dir, filtered_posture.replace(" ", "_"))
+                os.makedirs(posture_folder, exist_ok=True)
+
+                timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S-%f")[:-3]
+                filename = f"{filtered_posture.replace(' ', '_')}_{timestamp}.jpg"
+                filepath = os.path.join(posture_folder, filename)
+
+                cv2.imwrite(filepath, image) 
+                #print(f"📸 Saved screenshot: {filepath}")
+                self.screenshot_counts[filtered_posture] += 1
+
+                
+            latest_vision_posture = filtered_posture
+            self.posture_updated.emit(filtered_posture)
+
+            # Increment frame counter
+            self.frame_counter += 1
+
+            # Log to database every 5 frames (~2 times per second)
+            if self.frame_counter % 5 == 0:
+                timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+                posture_database.save_posture(filtered_posture, timestamp=timestamp)
+
+            # Display prediction and probability
+            if 'prob' in locals() and prob is not None:
+                cv2.putText(image, f"Posture: {pred} ({prob*100:.2f}%)", (50, 50),
+                            cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2, cv2.LINE_AA)
+            else:
+                cv2.putText(image, f"Posture: {pred}", (50, 50),
+                            cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2, cv2.LINE_AA)
+
+            # Draw bounding box
+            if bbox:
+                x, y, w, h = bbox
+                cv2.rectangle(image, (x, y), (x + w, y + h), (0, 255, 0), 2)
+                cv2.putText(image, "Tracking", (x, y - 10),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2, cv2.LINE_AA)
+
+            # Draw landmarks
+            mp.solutions.drawing_utils.draw_landmarks(
+                image, results.pose_landmarks, mp_pose.POSE_CONNECTIONS)
+
+            # Show webcam feed
+            cv2.imshow('Webcam Feed', image)
+            if cv2.waitKey(10) & 0xFF == ord('q'):
+                break
 
             time.sleep(0.1)  # Reduce delay for smoother updates
 
         cap.release()
+        cv2.destroyAllWindows()
 
 def get_latest_vision_posture():
     return latest_vision_posture
+
+def run():
+    """Standalone execution entry point."""
+    try:
+        detector = PostureDetector()
+        detector.is_running = True
+        detector.run_pose_detection()
+    except KeyboardInterrupt:
+        print("\n[INFO] Stopping posture detection.")
+        detector.is_running = False
+
+if __name__ == "__main__":
+    run()

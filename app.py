@@ -16,6 +16,7 @@ from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from PyQt5.QtCore import QTimer
 import numpy as np
 import time
+import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 from scipy.ndimage import gaussian_filter
 import threading
@@ -28,6 +29,10 @@ from posture_database import export_to_csv
 import traceback
 from features import get_latest_vision_posture
 from data_collection import get_latest_pressure_posture
+
+import ctypes
+myappid = u"PostSync"  # Can be any unique string
+ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
 
 def print_current_postures():
     print("Vision Posture:", get_latest_vision_posture())
@@ -53,6 +58,9 @@ def print_final_posture():
 
 NODEMCU_IP = "http://192.168.43.57"  # Ensure this matches your NodeMCU IP
 ENDPOINT = "/get_data"
+
+icon_path = os.path.abspath("postsync_logo.ico")
+
 
 
 class UIHelper:
@@ -92,6 +100,8 @@ class HomePage(QWidget):
         self.stacked_widget = stacked_widget
         self.logs_page = logs_page   # Reference Logs page 
         self.last_notification = None
+
+        self.vision_detector = PostureDetector()
 
         self.features = Features()
         self.detector = PostureDetector()  # Initialize PostureDetector
@@ -141,6 +151,7 @@ class HomePage(QWidget):
             self.ax.set_yticks([])  
 
         self.pressure_canvas.figure.tight_layout()
+        plt.close('all')
         
     def run_data_collection():
         """Start data collection as a background process."""
@@ -181,7 +192,7 @@ class HomePage(QWidget):
 
         # Pressure Data
         left_layout.addWidget(UIHelper.create_label(
-            "Pressure Data", 14, (170, 16)))
+            "Cushion Activity", 14, (170, 16)))
 
         # Placeholder for displaying the heatmap of pressure data from the sensors
         self.pressure_layout = QVBoxLayout()
@@ -189,6 +200,8 @@ class HomePage(QWidget):
         self.pressure_canvas.setFixedSize(225, 225)  # Set fixed pixel size (width x height)
         self.pressure_layout.addWidget(self.pressure_canvas)
         left_layout.addLayout(self.pressure_layout)
+        plt.close('all')
+
 
         # Current Posture
         left_layout.addWidget(UIHelper.create_label(
@@ -321,16 +334,22 @@ class HomePage(QWidget):
         status = "enabled" if self.notifications_enabled else "disabled"
         print(f"Notifications {status}")
         self.logs_page.append_log(f"[SETTINGS]: Notifications {status}")
-        
+
     def show_notification(self, message):
-        """Display notification alerts in the log."""
-        self.logs_page.append_log(f"[ALERT]: {message}")
-        # Toast notification that disappears automatically
+        """Display notification alerts with timestamp and app icon."""
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+        full_message = f"[{timestamp}] {message}"
+
+        self.logs_page.append_log(f"[ALERT]: {full_message}")
+
+        # Show system notification using plyer
         notification.notify(
             title="Posture Alert",
-            message=message,
-            timeout=5  # seconds
+            message=full_message,
+            timeout=5,
+            app_icon=icon_path if os.path.exists(icon_path) else None  # .ico on Windows
         )
+
 
     def create_toggle_section(self, label_text):
         layout = QHBoxLayout()
@@ -375,6 +394,7 @@ class HomePage(QWidget):
 
         if self.start_button.text() == "Stop":
             self.detector.start_detection()
+            self.vision_detector.start_detection()
             data_collection.start_recording()
 
             if self.heatmap is None:
@@ -388,6 +408,7 @@ class HomePage(QWidget):
 
         else:
             self.detector.stop_detection()
+            self.vision_detector.stop_detection()
             data_collection.stop_recording()
             if hasattr(self, 'timer'):
                 self.timer.stop()  # Stop the timer when stopping
@@ -403,7 +424,7 @@ class HomePage(QWidget):
         if data:
             with open("posture_data.csv", mode="w", newline="") as file:
                 writer = csv.writer(file)
-                writer.writerow(["Time", "Posture", "Duration"])  # CSV header
+                writer.writerow(["Time", "Posture"])  # CSV header
                 writer.writerows(data)  # Write database records
 
         conn.close()
