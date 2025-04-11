@@ -132,8 +132,6 @@ ENV/
 env.bak/
 venv.bak/
 
-.csv
-
 # Spyder project settings
 .spyderproject
 .spyproject
@@ -168,3 +166,13 @@ cython_debug/
 # Ignore database and exported CSVs
 /data/db/
 /data/exports/
+
+# Ignore screenshots
+/saved postures
+/screenshots
+
+# Ignore CSV files
+*.csv 
+
+# Ignore DB files
+*.db
