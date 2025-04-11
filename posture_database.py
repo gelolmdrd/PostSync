@@ -34,10 +34,10 @@ def save_posture(posture, timestamp=None):
     """Save a detected posture into the database with a precise timestamp."""
     if timestamp is None:
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
-
+    
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
-
+    
     # Make sure the table exists
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS posture_logs (
@@ -45,11 +45,12 @@ def save_posture(posture, timestamp=None):
             posture TEXT
         )
     """)
-
+    
     cursor.execute("INSERT INTO posture_logs (timestamp, posture) VALUES (?, ?)", (timestamp, posture))
     conn.commit()
     conn.close()
-    
+    #print(f"[DATABASE] Saved vision posture: {posture} at {timestamp}")
+
 def export_to_csv():
     """Export posture data from the database to a CSV file."""
     if not os.path.exists(db_path):
