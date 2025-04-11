@@ -14,6 +14,7 @@ from matplotlib.figure import Figure
 from matplotlib.image import imread
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from PyQt5.QtCore import QTimer
+from PyQt5.QtCore import qInstallMessageHandler, QtMsgType
 import numpy as np
 import time
 import matplotlib.pyplot as plt
@@ -185,7 +186,11 @@ class HomePage(QWidget):
 
         # Logo
         logo_label = QLabel()
-        logo_label.setPixmap(QPixmap("assets/PostSync Logo_scaled.png"))
+        logo_pixmap = QPixmap("assets/PostSync Logo_scaled.png")
+        if not logo_pixmap.isNull():
+            logo_label.setPixmap(logo_pixmap)
+        else:
+            print("Failed to load logo image.")
         logo_label.setAlignment(Qt.AlignLeft)
         logo_label.setFixedSize(242, 65)
         left_layout.addWidget(logo_label)
@@ -273,6 +278,7 @@ class HomePage(QWidget):
         # Haptic Feedback Toggle
         haptic_layout = self.create_toggle_section("Haptic Feedback")
         self.haptic_toggle = haptic_layout[1]
+        self.haptic_toggle.stateChanged.connect(self.toggle_haptic_feedback)
         alerts_section.addLayout(haptic_layout[0])
 
         # Notifications Toggle
@@ -289,6 +295,12 @@ class HomePage(QWidget):
     def show_logs(self):
         self.logs_page = LogsPage(self)
         self.setCentralWidget(self.logs_page)
+
+    def log_message(self, message: str):
+        if hasattr(self, "log_text"):
+            self.log_text.append(message)
+        else:
+            print(f"[LOG]: {message}")  # Fallback for early-stage logging
 
     def go_to_logs(self):
         """Switch to the logs page when the Show Logs button is clicked."""
@@ -309,6 +321,7 @@ class HomePage(QWidget):
         if finalNotif != self.last_detected_posture:
             self.last_detected_posture = finalNotif
             self.posture_start_time = current_time
+            self.last_notification_time = 0
 
         # Calculate how long posture has been held
         elapsed_time = current_time - self.posture_start_time
@@ -318,15 +331,26 @@ class HomePage(QWidget):
             self.show_notification("Good Posture! Keep It Up.")
             self.last_notification = "good"
 
-        elif finalNotif in bad_postures and elapsed_time >= 30 and self.last_notification != "bad":
-            print("❌ Bad posture notification triggered!")
-            self.show_notification("Bad Posture! Fix your sitting position.")
-            self.last_notification = "bad"
+        elif finalNotif in bad_postures:
+            if (not hasattr(self, 'last_notification_time')) or (current_time - self.last_notification_time >= 10):
+                print("❌ Bad posture notification triggered!")
+                self.show_notification("Bad Posture! Fix your sitting position.")
+                self.last_notification = "bad"
+                self.last_notification_time = current_time
 
         elif finalNotif == no_user and elapsed_time >= 1 and self.last_notification != "no user":
             print("🚫 No person detected notification triggered!")
             self.show_notification("No Person Detected on Chair.")
             self.last_notification = "no user"
+
+    def toggle_haptic_feedback(self, state):
+        from data_collection import set_haptic_enabled
+        enabled = state == Qt.Checked
+        set_haptic_enabled(enabled)
+
+        status = "enabled" if enabled else "disabled"
+        print(f"Haptic feedback {status}")
+        self.logs_page.append_log(f"[SETTINGS]: Haptic feedback {status}")
 
     def toggle_notifications(self, state):
         """Enable or disable pop-up notifications based on user toggle."""
@@ -350,13 +374,26 @@ class HomePage(QWidget):
             app_icon=icon_path if os.path.exists(icon_path) else None  # .ico on Windows
         )
 
+    def handler(mode, context, message):
+        if "QPainter::begin" in message:
+            return  # Suppress specific warnings
+        print(message)
+
+    qInstallMessageHandler(handler)
 
     def create_toggle_section(self, label_text):
         layout = QHBoxLayout()
         layout.addWidget(UIHelper.create_label(label_text, 12, (120, 24)))
         toggle = QCheckBox()
         toggle.setIcon(QIcon("./assets/toggleOff.png"))
-        toggle.setIconSize(QPixmap("./assets/toggleOff.png").size())
+        pixmap = QPixmap("./assets/toggleOff.png")
+        if not pixmap.isNull():
+            toggle.setIcon(QIcon(pixmap))
+            size = pixmap.size()
+            toggle.setIconSize(size)
+
+        else:
+            print("Failed to load toggleOff.png")
         toggle.setStyleSheet(
             "QCheckBox::indicator { width: 0px; height: 0px; }")
         toggle.stateChanged.connect(

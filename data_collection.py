@@ -12,6 +12,7 @@ from PyQt5.QtWidgets import QLabel
 import tkinter as tk
 import threading
 from datetime import datetime
+from collections import deque
 
 # NodeMCU Server IP (Change this to your actual IP)
 NODEMCU_IP = "http://192.168.43.57"
@@ -26,6 +27,10 @@ haptic_active = False  # Track if haptic feedback is currently on
 recording = False
 latest_pressure_posture = "Unknown"
 pressure_sensor_error_notified = False
+posture_queue = deque(maxlen=5)  # Stores last 5 pressure postures
+last_filtered_posture = None     # Tracks last filtered result
+haptic_enabled = False  # Controlled by the UI toggle
+
 
 SENSOR_LABELS = [
     "Sensor_1", "Sensor_2", "Sensor_3",
@@ -63,6 +68,14 @@ canvas = FigureCanvas(fig)  # ✅ Use PyQt-compatible canvas
 
 posture_label = QLabel("Detecting...")
 posture_label.setStyleSheet("font-size: 14px; font-weight: bold; font-family: Arial;")
+
+def apply_posture_filter(new_posture):
+    """Apply a moving average (majority vote) filter to smooth posture."""
+    posture_queue.append(new_posture)
+    if len(posture_queue) == posture_queue.maxlen:
+        return max(set(posture_queue), key=posture_queue.count)
+    else:
+        return new_posture  # Not enough data yet, return raw
 
 def start_recording():
     """Starts collecting data and updating the application."""
@@ -128,13 +141,22 @@ def classify_posture(sensor_values, ui_callback=None):
 
 import threading
 
+def set_haptic_enabled(state: bool):
+    global haptic_enabled
+    haptic_enabled = state
+
 def check_and_trigger_haptic(sensor_values):
     """Triggers haptic feedback as a pulse when incorrect posture is detected."""
-    global last_haptic_trigger_time, incorrect_posture_start_time, haptic_active
+    global last_haptic_trigger_time, incorrect_posture_start_time, haptic_active, raw_posture, filtered_posture
 
-    posture = classify_posture(sensor_values)
+    raw_posture = classify_posture(sensor_values)
+    filtered_posture = apply_posture_filter(raw_posture)
+    posture = filtered_posture  # Use this throughout below
     current_time = time.time()
-
+    
+    if not haptic_enabled:
+        return  # Haptic feedback is currently disabled
+    
     if posture == "Incorrect Posture":
         if incorrect_posture_start_time is None:
             incorrect_posture_start_time = current_time  # Start timer
@@ -173,10 +195,11 @@ def update_posture_in_app(posture, parent_widget=None):
     if parent_widget and isinstance(parent_widget, HomePage):
         parent_widget.update_pressure_posture(posture)
 posture = "unknown"
+
 def update(frame):
     """Update the heatmap and detect posture"""
     global chair_layout, cbar, heatmap, posture
-    global pressure_sensor_error_notified  # Track if error was already shown
+    global pressure_sensor_error_notified  # Track if error was already 
 
     try:
         response = requests.get(f"{NODEMCU_IP}{ENDPOINT}", timeout=3)
@@ -231,15 +254,21 @@ def update(frame):
             print(f"⚠️ Warning: Pressure sensor is not responding. Error: {e}")
             pressure_sensor_error_notified = True
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
-    print(f"[{timestamp}] Current Pressure Posture detected: {posture}")
+    print(f"[{timestamp}] Raw: {raw_posture} | Filtered: {filtered_posture}")
 
 # ✅ Simple getter
 def get_latest_pressure_posture():
     return latest_pressure_posture
 
 # Animation for updating heatmap
-ani = FuncAnimation(fig, update, interval=500, cache_frame_data=False)
+ani = None  # Global variable
+
+def setup_animation():
+    global ani
+    ani = FuncAnimation(fig, update, interval=500, cache_frame_data=False)
+
 if __name__ == "__main__":  
+    setup_animation()
     start_recording()  # Or your main function
     plt.show()  # Keep this if you need the heatmap to display
 

@@ -131,6 +131,12 @@ myenv/
 ENV/
 env.bak/
 venv.bak/
+saved postures/
+screenshots/
+
+
+.csv
+
 
 # Spyder project settings
 .spyderproject
@@ -175,4 +181,4 @@ cython_debug/
 *.csv 
 
 # Ignore DB files
-*.db
+.db

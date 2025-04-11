@@ -18,6 +18,7 @@ import warnings
 warnings.filterwarnings("ignore", category=UserWarning)
 
 latest_vision_posture = "Unknown"
+global bbox
 
 # Load Machine Learning Model and Scaler
 model = joblib.load(os.path.join(os.path.dirname(__file__), "models", "svm.pkl"))
@@ -69,10 +70,6 @@ class Features:
         """Handles log messages."""
         return f"[LOG]: {message}"
     
-    def toggle_alert(self, toggle_state):
-        """Handles alert toggles."""
-        return "Enabled" if toggle_state else "Disabled"
-    
     def get_posture_status(self):
         """Placeholder for getting posture status from ML model."""
         return "Good Posture"  # Replace with actual model inference
@@ -93,7 +90,7 @@ class PostureDetector(QObject):
         self.posture_start_time = None  # Track when posture started
         self.last_notification = None  # Track last notification sent
         self.frame_counter = 0  # Tracks number of processed frames
-        self.posture_queue = deque(maxlen=1)  # Stores last 5 postures for filtering
+        self.posture_queue = deque(maxlen=5)  # Stores last 5 postures for filtering
 
         self.screenshot_counts = {
             "Upright": 0,
@@ -131,7 +128,7 @@ class PostureDetector(QObject):
 
     def run_pose_detection(self):
         """Continuously capture frames and process posture detection."""
-        global tracking_initialized
+        global tracking_initialized, bbox
         global latest_vision_posture
         cap = cv2.VideoCapture(0)
         cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # Reduce latency
@@ -260,10 +257,14 @@ class PostureDetector(QObject):
 
             # Show webcam feed
             cv2.imshow('Webcam Feed', image)
-            if cv2.waitKey(10) & 0xFF == ord('q'):
+
+            # Exit if window was closed or 'q' was pressed
+            if cv2.getWindowProperty('Webcam Feed', cv2.WND_PROP_VISIBLE) == 0:
+                self.is_running = False
                 break
 
-            time.sleep(0.1)  # Reduce delay for smoother updates
+            if cv2.waitKey(10) & 0xFF == ord('q'):
+                break
 
         cap.release()
         cv2.destroyAllWindows()
