@@ -3,8 +3,16 @@ import os
 import pandas as pd
 from datetime import datetime
 
-db_path = "posture_logs.db"
-csv_path = "posture_data.csv"
+# Create folders if they don't exist
+db_folder = "data/db"
+csv_folder = "data/exports"
+os.makedirs(db_folder, exist_ok=True)
+os.makedirs(csv_folder, exist_ok=True)
+
+# File paths
+db_path = os.path.join(db_folder, "posture_logs.db")
+timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+csv_path = os.path.join(csv_folder, f"PostSync_{timestamp}_posture_data.csv")
 
 def initialize_database():
     """Create the database and table if they don't exist."""

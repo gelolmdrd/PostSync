@@ -445,6 +445,7 @@ class LogsPage(QWidget):
         
         # Create a save button
         self.save_button = UIHelper.create_button("save")
+        self.save_button.setIcon(QIcon("./assets/Save.png"))
         self.save_button.clicked.connect(export_to_csv)
         top_layout.addWidget(self.save_button)
         
