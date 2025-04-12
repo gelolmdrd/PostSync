@@ -625,7 +625,7 @@ class LogsPage(QWidget):
 
     def go_back(self):
         """Go back to the main detection page."""
-        self.parent().setCurrentIndex(0)  # Adjust based on your stacked widget index
+        self.parent().setCurrentIndex(1)  # Adjust based on your stacked widget index
         
 
 class PostSyncApp(QMainWindow):
