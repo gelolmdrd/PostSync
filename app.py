@@ -155,11 +155,11 @@ class HomePage(QWidget):
         self.stacked_widget = stacked_widget
         self.logs_page = logs_page   # Reference Logs page 
         self.last_notification = None
-        self.features = Features()
-        
+
         self.vision_detector = PostureDetector()
         self.vision_detector.posture_updated.connect(self.update_posture_status)
-
+        
+        self.features = Features()
         self.detector = PostureDetector()  # Initialize PostureDetector
         self.detector.posture_updated.connect(self.update_posture_status)
         self.detector.notification_alert.connect(self.trigger_notification)
