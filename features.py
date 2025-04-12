@@ -132,6 +132,7 @@ class PostureDetector(QObject):
         global latest_vision_posture
         cap = cv2.VideoCapture(0)
         cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # Reduce latency
+        print(f"Vision Posture: {latest_vision_posture}")
 
         global last_log_time  
         last_log_time = None  # Ensure it's initialized properly

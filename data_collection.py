@@ -23,13 +23,13 @@ HAPTIC_TRIGGER_INTERVAL = 0  # Seconds before another haptic trigger
 HAPTIC_DETECTION_TIME = 30    # Posture must be incorrect for 10 sec before triggering
 last_haptic_trigger_time = 0  # Stores last trigger time
 incorrect_posture_start_time = None  # Start time for incorrect posture
-haptic_active = False  # Track if haptic feedback is currently on
+haptic_active = True  # Track if haptic feedback is currently on
 recording = False
 latest_pressure_posture = "Unknown"
 pressure_sensor_error_notified = False
 posture_queue = deque(maxlen=5)  # Stores last 5 pressure postures
 last_filtered_posture = None     # Tracks last filtered result
-haptic_enabled = False  # Controlled by the UI toggle
+haptic_enabled = True  # Controlled by the UI toggle
 
 
 SENSOR_LABELS = [

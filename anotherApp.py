@@ -2,20 +2,19 @@ import sys
 import mediapipe as mp
 import os
 from PyQt5.QtWidgets import (
-    QApplication, QMainWindow, QWidget, QHBoxLayout, QVBoxLayout, QDialog, QLabel, 
-    QPushButton, QTextEdit, QCheckBox, QStackedWidget, QSpacerItem, QSizePolicy
+    QApplication, QMainWindow, QWidget, QHBoxLayout, QVBoxLayout, QTabWidget, QScrollArea, QFrame,
+    QLabel, QPushButton, QTextEdit, QCheckBox, QStackedWidget, QSpacerItem, QSizePolicy
 )
 from PyQt5.QtGui import QPixmap, QIcon, QFont
 from PyQt5.QtCore import Qt
 from features import Features, PostureDetector
 from datetime import datetime
+from plyer import notification
 from matplotlib.figure import Figure
-from matplotlib.image import imread
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
-from PyQt5.QtCore import qInstallMessageHandler, QtMsgType
+from PyQt5.QtCore import QTimer
 import numpy as np
 import time
-import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 from scipy.ndimage import gaussian_filter
 import threading
@@ -24,16 +23,9 @@ import data_collection # Import data_collection.py
 import csv
 import sqlite3
 import posture_database
-from posture_database import export_to_csv
 import traceback
 from features import get_latest_vision_posture
 from data_collection import get_latest_pressure_posture
-from plyer import notification
-from PyQt5.QtCore import QTimer
-
-import ctypes
-myappid = u"PostSync"  # Can be any unique string
-ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
 
 def print_current_postures():
     print("Vision Posture:", get_latest_vision_posture())
@@ -60,9 +52,6 @@ def print_final_posture():
 NODEMCU_IP = "http://192.168.43.57"  # Ensure this matches your NodeMCU IP
 ENDPOINT = "/get_data"
 
-icon_path = os.path.abspath("postsync_logo.ico")
-
-
 
 class UIHelper:
     """Utility class for reusable UI components and styles."""
@@ -71,9 +60,7 @@ class UIHelper:
         label = QLabel(text)
         font = QFont("Roboto", font_size)
         label.setFont(font)
-        label.setStyleSheet(f"color: #F1F1F1; font-size: {font_size}px; margin: 0px; padding: 0px;")
-        label.setContentsMargins(0, 0, 0, 0)  # No padding inside label
-        # Set border using styleshee
+        label.setStyleSheet(f"color: #F1F1F1; font-size: {font_size}px;")
         if fixed_size:
             label.setFixedSize(*fixed_size)
         if align:
@@ -94,75 +81,18 @@ class UIHelper:
     def update_toggle_icon(toggle, state):
         toggle.setIcon(
             QIcon("./assets/toggleOn.png" if state else "./assets/toggleOff.png"))
-        
-class WelcomeScreen(QWidget):
+
+
+class HomePage(QWidget):
     def __init__(self, stacked_widget):
         super().__init__()
         self.stacked_widget = stacked_widget
-        self.init_ui()
-
-    def init_ui(self):
-        layout = QVBoxLayout()
-        layout.setAlignment(Qt.AlignCenter)
-        
-        # Horizontal layout for "Welcome to" + logo
-        title_layout = QHBoxLayout()
-        title_layout.setAlignment(Qt.AlignCenter)
-
-        welcome_label = UIHelper.create_label("Welcome to ", 48)
-        
-        logo_label = QLabel()
-        logo_pixmap = QPixmap("./assets/PostSync Logo_scaled.png")
-        # logo_pixmap = logo_pixmap.scaledToHeight(48, Qt.SmoothTransformation)  # Match text height
-        logo_label.setPixmap(logo_pixmap)
-        logo_label.setAlignment(Qt.AlignCenter)
-
-        title_layout.addWidget(welcome_label)
-        title_layout.addWidget(logo_label)
-
-        layout.addLayout(title_layout)
-        layout.addWidget(UIHelper.create_label("Before you start, please ensure that your workstation is set up like the example below:", 
-                                            12), alignment=Qt.AlignCenter)
-
-        infographic = QLabel()
-        pixmap = QPixmap("./assets/workstation_setup.png")
-        pixmap = pixmap.scaled(600, 350, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-        infographic.setPixmap(pixmap)
-        infographic.setAlignment(Qt.AlignCenter)
-        
-         # Apply rounded corners using stylesheet
-        infographic.setStyleSheet("""
-            border-radius: 12px;
-            border: 1px solid #ccc;
-            background-color: #ffffff;
-            padding: 4px;
-        """)
-        
-        layout.addWidget(infographic)
-        
-        self.understand_button = UIHelper.create_button("I Understand")
-        self.understand_button.clicked.connect(self.proceed_to_main_app)
-        layout.addWidget(self.understand_button, alignment=Qt.AlignCenter)
-
-        self.setLayout(layout)
-
-    def proceed_to_main_app(self):
-        self.stacked_widget.setCurrentIndex(1)
-        
-class HomePage(QWidget):
-    def __init__(self, stacked_widget, logs_page):
-        super().__init__()
-        self.stacked_widget = stacked_widget
-        self.logs_page = logs_page   # Reference Logs page 
         self.last_notification = None
-        self.features = Features()
-        
-        self.vision_detector = PostureDetector()
-        self.vision_detector.posture_updated.connect(self.update_posture_status)
 
+        self.features = Features()
         self.detector = PostureDetector()  # Initialize PostureDetector
         self.detector.posture_updated.connect(self.update_posture_status)
-        self.detector.notification_alert.connect(self.trigger_notification)
+        self.detector.notification_alert.connect(self.show_notification)
         self.vision_posture = "Unknown"  # Store the last detected vision posture
         self.pressure_posture = "Unknown"  # Store the last detected pressure posture
 
@@ -170,14 +100,13 @@ class HomePage(QWidget):
         self.posture_start_time = time.time()
         self.last_notification = None
         self.notifications_enabled = False  # Default: notifications on
-        self.info_popup = None  # ✅ Initialize popup reference here
+
 
         self.init_ui()
         self.setup_pressure_heatmap()
 
     def init_ui(self):
         main_layout = QHBoxLayout()
-        main_layout.setSpacing(45)
         left_layout = self.create_left_section()
         right_layout = self.create_right_section()
         main_layout.addLayout(left_layout)
@@ -208,7 +137,6 @@ class HomePage(QWidget):
             self.ax.set_yticks([])  
 
         self.pressure_canvas.figure.tight_layout()
-        plt.close('all')
         
     def run_data_collection():
         """Start data collection as a background process."""
@@ -237,37 +165,29 @@ class HomePage(QWidget):
 
     def create_left_section(self):
         left_layout = QVBoxLayout()
-        left_layout.setSpacing(0)
-        left_layout.setContentsMargins (0, 0, 0, 0)
 
         # Logo
         logo_label = QLabel()
-        logo_pixmap = QPixmap("assets/PostSync Logo_scaled.png")
-        if not logo_pixmap.isNull():
-            logo_label.setPixmap(logo_pixmap)
-        else:
-            print("Failed to load logo image.")
+        logo_label.setPixmap(QPixmap("assets/PostSync Logo.png"))
         logo_label.setAlignment(Qt.AlignLeft)
         logo_label.setFixedSize(242, 65)
         left_layout.addWidget(logo_label)
 
         # Pressure Data
         left_layout.addWidget(UIHelper.create_label(
-            "Cushion Activity", 14, (170, 16)))
+            "Pressure Data", 10, (200, 16)))
 
         # Placeholder for displaying the heatmap of pressure data from the sensors
         self.pressure_layout = QVBoxLayout()
         self.pressure_canvas = FigureCanvas(Figure(figsize=(3, 3)))  # Matplotlib Figure
-        self.pressure_canvas.setFixedSize(225, 225)  # Set fixed pixel size (width x height)
         self.pressure_layout.addWidget(self.pressure_canvas)
         left_layout.addLayout(self.pressure_layout)
-        plt.close('all')
 
 
         # Current Posture
         left_layout.addWidget(UIHelper.create_label(
-            "Current Posture", 14, (170, 16)))
-        
+            "Current Posture", 10, (200, 30), Qt.AlignBottom))
+
         # Placeholder for displaying current posture status
         self.posture_status = UIHelper.create_label("", fixed_size=(200, 48))
         self.posture_status.setStyleSheet(
@@ -278,159 +198,66 @@ class HomePage(QWidget):
 
     def create_right_section(self):
         right_layout = QVBoxLayout()
-        right_layout.setSpacing(0)
-        right_layout.setContentsMargins (0, 0, 0, 0)
-        
-        # --- Info Button ---
-        self.info_button = QPushButton(" Click here to see proper workstation setup")
-        self.info_button.setIcon(QIcon("./assets/info.png"))
-        # self.info_button.setFixedSize(None, 16)
-        self.info_button.setStyleSheet("border: 2px; color: #B3B3B3")
-        self.info_button.setCursor(Qt.PointingHandCursor)
-        self.info_button.clicked.connect(self.show_info_popup)
-        
-        # Position info button top-right
-        right_layout.addWidget(self.info_button, Qt.AlignRight)
+        right_layout.addWidget(UIHelper.create_label("Logs", 12, (40, 20)))
 
-        # Create QLabel to display the guidelines image
-        self.guidelines_image = QLabel()
-        guidlines_pixmap = QPixmap("./assets/guidelines.png")
-
-        # Optional: scale the image to fit the QLabel size
-        guidlines_pixmap = guidlines_pixmap.scaled(400, 300, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-        self.guidelines_image.setPixmap(guidlines_pixmap)
-        self.guidelines_image.setFixedSize(420, 300)
-        self.guidelines_image.setAlignment(Qt.AlignCenter)
-
-        # Apply rounded corners using stylesheet
-        self.guidelines_image.setStyleSheet("""
-            border-radius: 12px;
-            border: 1px solid #ccc;
-            background-color: #ffffff;
-            padding: 4px;
-        """)
-
-        right_layout.addWidget(self.guidelines_image)
+        self.log_text = QTextEdit()
+        self.log_text.setReadOnly(True)
+        self.log_text.setStyleSheet(
+            "border-radius: 8px; background: #F1F1F1;padding: 5px")
+        self.log_text.setFixedSize(400, 260)
+        right_layout.addWidget(self.log_text)
 
         bottom_layout = self.create_bottom_controls()
         right_layout.addLayout(bottom_layout)
         return right_layout
-    
-    
-    def show_info_popup(self):
-        if self.info_popup is None:
-            self.info_popup = QDialog(self)
-            self.info_popup.setWindowTitle("Workspace Setup Guidelines")
-            self.info_popup.setFixedSize(560, 315)
-            self.info_popup.setModal(False)
-
-            layout = QVBoxLayout()
-                        
-            infographic = QLabel()
-            pixmap = QPixmap("./assets/workstation_setup.png")
-            pixmap = pixmap.scaled(480, 270, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-            infographic.setPixmap(pixmap)
-            infographic.setAlignment(Qt.AlignCenter)
-            
-            # Apply rounded corners using stylesheet
-            infographic.setStyleSheet("""
-                border-radius: 12px;
-                border: 1px solid #ccc;
-                background-color: #ffffff;
-                padding: 4px;
-            """)
-            
-            layout.addWidget(infographic)
-            self.info_popup.setLayout(layout)
-
-        self.info_popup.show()
-        self.info_popup.raise_()
-        self.info_popup.activateWindow()
 
     def create_bottom_controls(self):
         bottom_layout = QHBoxLayout()
-        
-        # Create controls section
-        controls_section = QVBoxLayout()
-                
-        controls_section.addWidget(UIHelper.create_label("Power", 12, (170, 16)))
+        left_controls = QVBoxLayout()
+
         self.start_button = UIHelper.create_button("Start")
         self.start_button.clicked.connect(self.handle_start)
-        controls_section.addWidget(self.start_button)
-        controls_section.addWidget(UIHelper.create_label("Logs", 12, (170, 16)))
-        self.logs_button = UIHelper.create_button("Show Logs", callback=self.go_to_logs)
-        controls_section.addWidget(self.logs_button)
-        
-        # Add controls section to bottom layout
-        bottom_layout.addLayout(controls_section)
+        left_controls.addWidget(UIHelper.create_label("Power", 12, (170, 16)))
+        left_controls.addWidget(self.start_button)
+        left_controls.addWidget(UIHelper.create_label("Info", 12, (170, 16)))
+        self.guidelines_button = UIHelper.create_button("Guidelines", callback=self.go_to_guidelines)
+        left_controls.addWidget(self.guidelines_button)
+        bottom_layout.addLayout(left_controls)
 
         # Add spacing before the alerts section
         bottom_layout.addSpacerItem(QSpacerItem(
-            48, 48, QSizePolicy.Minimum, QSizePolicy.Fixed))
-        
-        # Create alerts section
-        alerts_section = QVBoxLayout()
-        
-        alerts_section.addWidget(UIHelper.create_label("Alerts", 14, (170, 16)))
+            36, 36, QSizePolicy.Minimum, QSizePolicy.Fixed))
+
+        bottom_layout.addLayout(self.create_alerts_section())
+
+        return bottom_layout
+    
+    def show_guidelines(self):
+        self.guidelines_page = GuidelinesPage(self)
+        self.setCentralWidget(self.guidelines_page)
+
+    def go_to_guidelines(self):
+        """Switch to the guidelines page when the Guidelines button is clicked."""
+        self.stacked_widget.setCurrentWidget(self.stacked_widget.widget(1))  # ✅ Switch to GuidelinesPage
+
+    def create_alerts_section(self):
+        alerts_layout = QVBoxLayout()
+        alerts_layout.addWidget(UIHelper.create_label("Alerts", 12, (170, 16)))
 
         # Haptic Feedback Toggle
         haptic_layout = self.create_toggle_section("Haptic Feedback")
         self.haptic_toggle = haptic_layout[1]
-        self.haptic_toggle.stateChanged.connect(self.toggle_haptic_feedback)
-        alerts_section.addLayout(haptic_layout[0])
+        alerts_layout.addLayout(haptic_layout[0])
 
         # Notifications Toggle
         notif_layout = self.create_toggle_section("Notifications")
         self.notif_toggle = notif_layout[1]
         self.notif_toggle.stateChanged.connect(self.toggle_notifications)
-        alerts_section.addLayout(notif_layout[0])
-        
-        # Add alerts section to bottoms layout
-        bottom_layout.addLayout(alerts_section)
+        alerts_layout.addLayout(notif_layout[0])
 
-        return bottom_layout
-    
-    def show_logs(self):
-        self.logs_page = LogsPage(self)
-        self.setCentralWidget(self.logs_page)
-
-    def log_message(self, message: str):
-        if hasattr(self, "log_text"):
-            self.log_text.append(message)
-        else:
-            print(f"[LOG]: {message}")  # Fallback for early-stage logging
-
-    def go_to_logs(self):
-        """Switch to the logs page when the Show Logs button is clicked."""
-        self.stacked_widget.setCurrentWidget(self.stacked_widget.widget(1)) 
-
-    def trigger_notification(self, message):
-        """Send notification if message changed or enough time passed."""
-        if not hasattr(self, "_last_notification"):
-            self._last_notification = {"message": None, "time": 0}
-
-        now = time.time()
-        cooldown = 10  # seconds
-
-        if (
-            message != self._last_notification["message"]
-            or now - self._last_notification["time"] > cooldown
-        ):
-            print(f"🔔 Notification sent: {message}")
-            try:
-                notification.notify(
-                    title="Posture Alert",
-                    message=message,
-                    timeout=5
-                )
-                self._last_notification["message"] = message
-                self._last_notification["time"] = now
-            except Exception as e:
-                print(f"⚠️ Notification error: {e}")
-
+        return alerts_layout
 
     def check_final_posture_and_notify(self):
-        self.trigger_notification("This should pop up now.")  # 🔔 Test pop-up
         if not self.notifications_enabled:
             return
 
@@ -451,57 +278,42 @@ class HomePage(QWidget):
 
         if finalNotif == good_posture and elapsed_time >= 5 and self.last_notification != "good":
             print("✅ Good posture notification triggered!")
-            self.trigger_notification("Good Posture! Keep It Up.")
-            notification.notify(title="Debug Popup", message="Good Posture! Keep It Up.", timeout=5)
+            self.show_notification("Good Posture! Keep It Up.")
             self.last_notification = "good"
 
-        elif finalNotif in bad_postures and elapsed_time >= 1 and self.last_notification != "bad":
+        elif finalNotif in bad_postures and elapsed_time >= 30 and self.last_notification != "bad":
             print("❌ Bad posture notification triggered!")
-            self.trigger_notification("Bad Posture! Fix your sitting position.")
-            notification.notify(title="Debug Popup", message="Bad Posture! Fix your sitting position.", timeout=5)
+            self.show_notification("Bad Posture! Fix your sitting position.")
             self.last_notification = "bad"
-            
-        elif finalNotif == no_user and elapsed_time >= 1 and self.last_notification != "no user":
+
+        elif finalNotif == no_user and elapsed_time >= 1 and self.last_notification != "no_user":
             print("🚫 No person detected notification triggered!")
-            self.trigger_notification("No Person Detected on Chair.")
-            self.last_notification = "no user"
+            self.show_notification("No Person Detected on Chair.")
+            self.last_notification = "no_user"
 
     def toggle_notifications(self, state):
         """Enable or disable pop-up notifications based on user toggle."""
         self.notifications_enabled = state == Qt.Checked  # True if checked
         status = "enabled" if self.notifications_enabled else "disabled"
         print(f"Notifications {status}")
-        self.logs_page.append_log(f"[SETTINGS]: Notifications {status}")
+        self.log_text.append(f"[SETTINGS]: Notifications {status}")
 
-    def toggle_haptic_feedback(self, state):
-        from data_collection import set_haptic_enabled
-        enabled = state == Qt.Checked
-        set_haptic_enabled(enabled)
-
-        status = "enabled" if enabled else "disabled"
-        print(f"Haptic feedback {status}")
-        self.logs_page.append_log(f"[SETTINGS]: Haptic feedback {status}")
-
-    def handler(mode, context, message):
-        if "QPainter::begin" in message:
-            return  # Suppress specific warnings
-        print(message)
-
-    qInstallMessageHandler(handler)
+    def show_notification(self, message):
+        """Display notification alerts in the log."""
+        self.log_text.append(f"[ALERT]: {message}")
+        # Toast notification that disappears automatically
+        notification.notify(
+            title="Posture Alert",
+            message=message,
+            timeout=5  # seconds
+        )
 
     def create_toggle_section(self, label_text):
         layout = QHBoxLayout()
-        layout.addWidget(UIHelper.create_label(label_text, 12, (120, 24)))
+        layout.addWidget(UIHelper.create_label(label_text, 10, (120, 24)))
         toggle = QCheckBox()
         toggle.setIcon(QIcon("./assets/toggleOff.png"))
-        pixmap = QPixmap("./assets/toggleOff.png")
-        if not pixmap.isNull():
-            toggle.setIcon(QIcon(pixmap))
-            size = pixmap.size()
-            toggle.setIconSize(size)
-
-        else:
-            print("Failed to load toggleOff.png")
+        toggle.setIconSize(QPixmap("./assets/toggleOff.png").size())
         toggle.setStyleSheet(
             "QCheckBox::indicator { width: 0px; height: 0px; }")
         toggle.stateChanged.connect(
@@ -517,14 +329,14 @@ class HomePage(QWidget):
         current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             
         # Append log message with timestamp
-        self.logs_page.append_log(f"[{current_time}] Detected posture: {posture}")
+        self.log_text.append(f"[{current_time}] Detected posture: {posture}")
 
         self.check_final_posture_and_notify()
 
     def log_posture(self, source, posture):
         """Append original posture readings to the logs."""
         current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        self.logs_page.append_log(f"[{current_time}] {source} detected: {posture}")  # Keep detailed log
+        self.log_text.append(f"[{current_time}] {source} detected: {posture}")  # Keep detailed log
 
     def toggle_start_button(self):
         is_start = self.start_button.text() == "Start"
@@ -539,9 +351,7 @@ class HomePage(QWidget):
 
         if self.start_button.text() == "Stop":
             self.detector.start_detection()
-            self.vision_detector.start_detection()
             data_collection.start_recording()
-            self.trigger_notification("Test notification from PostSync!")
 
             if self.heatmap is None:
                 self.setup_pressure_heatmap()
@@ -554,7 +364,6 @@ class HomePage(QWidget):
 
         else:
             self.detector.stop_detection()
-            self.vision_detector.stop_detection()
             data_collection.stop_recording()
             if hasattr(self, 'timer'):
                 self.timer.stop()  # Stop the timer when stopping
@@ -570,81 +379,92 @@ class HomePage(QWidget):
         if data:
             with open("posture_data.csv", mode="w", newline="") as file:
                 writer = csv.writer(file)
-                writer.writerow(["Time", "Posture"])  # CSV header
+                writer.writerow(["Time", "Posture", "Duration"])  # CSV header
                 writer.writerows(data)  # Write database records
 
         conn.close()
         
-class LogsPage(QWidget):
+class GuidelinesPage(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.init_ui()
 
     def init_ui(self):
         main_layout = QVBoxLayout(self)  # Main layout for the page
-                
-        # ✅ Create top layout for Label and Save Button
-        top_layout = QHBoxLayout()
-        
-        top_layout.addWidget(UIHelper.create_label("Logs", 14, (40, 20)))
-        top_layout.addStretch(1)  # Push everything else to the right
-        
-        # Create a save button
-        self.save_button = UIHelper.create_button("save")
-        self.save_button.setIcon(QIcon("./assets/Save.png"))
-        self.save_button.clicked.connect(export_to_csv)
-        top_layout.addWidget(self.save_button)
-        
-        main_layout.addLayout(top_layout)
-        
-        self.log_text = QTextEdit()
-        self.log_text.setReadOnly(True)
-        self.log_text.setStyleSheet(
-            "border-radius: 8px; background: #F1F1F1;padding: 5px")
-        self.log_text.setFixedSize(710, 360)
-        
-        main_layout.addWidget(self.log_text)  # Left align button
-        
+
+        # ✅ Create Tab Widget to contain images
+        tab_widget = QTabWidget(self)
+
+        # ✅ Create a scroll area for images inside the tab
+        scroll_area = QScrollArea(self)
+        scroll_area.setWidgetResizable(True)
+
+        scroll_widget = QWidget()
+        content_layout = QVBoxLayout(scroll_widget)
+
+        # ✅ Define image folder and files
+        image_folder = "guidelines"
+        image_files = ["1.png", "2.png", "3.png"]
+
+        for img_name in image_files:
+            img_path = os.path.join(image_folder, img_name)
+
+            if os.path.exists(img_path):
+                label = QLabel(self)
+                pixmap = QPixmap(img_path)
+
+                if not pixmap.isNull():
+                    label.setPixmap(pixmap)
+                    label.setScaledContents(True)
+                    label.setFixedSize(500, 500)  # ✅ Adjust this size if needed
+                    content_layout.addWidget(label)
+                else:
+                    print(f"⚠️ Error: Could not load image {img_path}")
+            else:
+                print(f"⚠️ Warning: Image {img_path} not found")
+
+        scroll_widget.setLayout(content_layout)
+        scroll_area.setWidget(scroll_widget)
+
+        # ✅ Add the scroll area inside the tab
+        tab_widget.addTab(scroll_area, "Guideline Images")
+
         # ✅ Back Button (Lower Left)
-        self.back_button = UIHelper.create_button("back")
-        self.back_button.clicked.connect(self.go_back)
-        
+        back_button = QPushButton("Back")
+        back_button.setFixedSize(100, 40)  # Adjust size if needed
+        back_button.clicked.connect(self.go_back)  # Make sure this method is defined in the main app
+
         # ✅ Create bottom layout for Back Button
         bottom_layout = QHBoxLayout()
-        bottom_layout.addWidget(self.back_button)  # Left align button
+        bottom_layout.addWidget(back_button)  # Left align button
         bottom_layout.addStretch(1)  # Push everything else to the right
 
         # ✅ Add widgets to the main layout
+        main_layout.addWidget(tab_widget)  # Images inside the tab
         main_layout.addLayout(bottom_layout)  # Back button at the bottom left
 
         self.setLayout(main_layout)
-    
-    def append_log(self, message):
-        self.log_text.append(message)
 
     def go_back(self):
         """Go back to the main detection page."""
         self.parent().setCurrentIndex(0)  # Adjust based on your stacked widget index
-        
 
 class PostSyncApp(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowIcon(QIcon('./assets/logo.png'))
         self.setWindowTitle("PostSync App")
-        self.setFixedSize(800, 560)
+        self.setFixedSize(760, 480)
         self.setStyleSheet("background-color:#1E1E1E")
         self.setContentsMargins(36, 24, 36, 24)
 
         self.stacked_widget = QStackedWidget()
-        
-        self.welcome_screen = WelcomeScreen(self.stacked_widget)
-        self.logs_page = LogsPage(self.stacked_widget)
-        self.home_page = HomePage(self.stacked_widget, self.logs_page)
 
-        self.stacked_widget.addWidget(self.welcome_screen) # WelcomeScreen (index 0)
-        self.stacked_widget.addWidget(self.home_page)  # HomePage (index 1)
-        self.stacked_widget.addWidget(self.logs_page)  # LogsPage (index 2) 
+        self.home_page = HomePage(self.stacked_widget)
+        self.guidelines_page = GuidelinesPage(self.stacked_widget)  # ✅ Add this line
+
+        self.stacked_widget.addWidget(self.home_page)  # HomePage (index 0)
+        self.stacked_widget.addWidget(self.guidelines_page)  # GuidelinesPage (index 1) 
         
         self.setCentralWidget(self.stacked_widget)
     
@@ -653,9 +473,10 @@ class PostSyncApp(QMainWindow):
         print("Exporting posture data to CSV before closing the application...")  # Debugging
         print_current_postures()
         print_final_posture()
-        #posture_database.export_to_csv()  # Export posture logs to CSV
-        #print("CSV export complete.")  # Debugging confirmation
+        posture_database.export_to_csv()  # Export posture logs to CSV
+        print("CSV export complete.")  # Debugging confirmation
         event.accept()  # Ensures the application closes properly
+
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
