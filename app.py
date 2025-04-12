@@ -402,7 +402,7 @@ class HomePage(QWidget):
 
     def go_to_logs(self):
         """Switch to the logs page when the Show Logs button is clicked."""
-        self.stacked_widget.setCurrentWidget(self.stacked_widget.widget(1)) 
+        self.stacked_widget.setCurrentWidget(self.stacked_widget.widget(2)) 
 
     def trigger_notification(self, message):
         """Send notification if message changed or enough time passed."""
@@ -493,8 +493,9 @@ class HomePage(QWidget):
         layout = QHBoxLayout()
         layout.addWidget(UIHelper.create_label(label_text, 12, (120, 24)))
         toggle = QCheckBox()
-        toggle.setIcon(QIcon("./assets/toggleOff.png"))
-        pixmap = QPixmap("./assets/toggleOff.png")
+        toggle.setChecked(True)  # ✅ Set the default state to ON (checked)
+        toggle.setIcon(QIcon("./assets/toggleOn.png"))  # ✅ Set the ON icon initially
+        pixmap = QPixmap("./assets/toggleOn.png")  # ✅ Use ON icon to match the checked state
         if not pixmap.isNull():
             toggle.setIcon(QIcon(pixmap))
             size = pixmap.size()
