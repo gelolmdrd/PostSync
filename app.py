@@ -165,11 +165,12 @@ class HomePage(QWidget):
         self.detector.notification_alert.connect(self.trigger_notification)
         self.vision_posture = "Unknown"  # Store the last detected vision posture
         self.pressure_posture = "Unknown"  # Store the last detected pressure posture
+        self.last_notification_time = 0
 
         self.last_detected_posture = None
         self.posture_start_time = time.time()
         self.last_notification = None
-        self.notifications_enabled = False  # Default: notifications on
+        self.notifications_enabled = True  # Default: notifications on
         self.info_popup = None  # ✅ Initialize popup reference here
 
         self.init_ui()
@@ -428,9 +429,7 @@ class HomePage(QWidget):
             except Exception as e:
                 print(f"⚠️ Notification error: {e}")
 
-
     def check_final_posture_and_notify(self):
-        self.trigger_notification("This should pop up now.")  # 🔔 Test pop-up
         if not self.notifications_enabled:
             return
 
@@ -447,24 +446,26 @@ class HomePage(QWidget):
             self.posture_start_time = current_time
 
         # Calculate how long posture has been held
-        elapsed_time = current_time - self.posture_start_time
+        posture_duration = current_time - self.posture_start_time
+        time_since_last_notif = current_time - self.last_notification_time
 
-        if finalNotif == good_posture and elapsed_time >= 5 and self.last_notification != "good":
+        if finalNotif == good_posture and posture_duration >= 5 and (self.last_notification != "good" or time_since_last_notif >= 30):
             print("✅ Good posture notification triggered!")
             self.trigger_notification("Good Posture! Keep It Up.")
-            notification.notify(title="Debug Popup", message="Good Posture! Keep It Up.", timeout=5)
             self.last_notification = "good"
+            self.last_notification_time = current_time
 
-        elif finalNotif in bad_postures and elapsed_time >= 1 and self.last_notification != "bad":
+        elif finalNotif in bad_postures and posture_duration >= 1 and time_since_last_notif >= 30:
             print("❌ Bad posture notification triggered!")
             self.trigger_notification("Bad Posture! Fix your sitting position.")
-            notification.notify(title="Debug Popup", message="Bad Posture! Fix your sitting position.", timeout=5)
             self.last_notification = "bad"
-            
-        elif finalNotif == no_user and elapsed_time >= 1 and self.last_notification != "no user":
+            self.last_notification_time = current_time
+
+        elif finalNotif == no_user and posture_duration >= 1 and self.last_notification != "no user":
             print("🚫 No person detected notification triggered!")
             self.trigger_notification("No Person Detected on Chair.")
             self.last_notification = "no user"
+            self.last_notification_time = current_time
 
     def toggle_notifications(self, state):
         """Enable or disable pop-up notifications based on user toggle."""
