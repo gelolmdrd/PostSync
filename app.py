@@ -2,8 +2,8 @@ import sys
 import mediapipe as mp
 import os
 from PyQt5.QtWidgets import (
-    QApplication, QMainWindow, QWidget, QHBoxLayout, QVBoxLayout, QTabWidget, QScrollArea, QFrame,
-    QLabel, QPushButton, QTextEdit, QCheckBox, QStackedWidget, QSpacerItem, QSizePolicy
+    QApplication, QMainWindow, QWidget, QHBoxLayout, QVBoxLayout, QDialog, QLabel, 
+    QPushButton, QTextEdit, QCheckBox, QStackedWidget, QSpacerItem, QSizePolicy
 )
 from PyQt5.QtGui import QPixmap, QIcon, QFont
 from PyQt5.QtCore import Qt
@@ -95,6 +95,60 @@ class UIHelper:
         toggle.setIcon(
             QIcon("./assets/toggleOn.png" if state else "./assets/toggleOff.png"))
         
+class WelcomeScreen(QWidget):
+    def __init__(self, stacked_widget):
+        super().__init__()
+        self.stacked_widget = stacked_widget
+        self.init_ui()
+
+    def init_ui(self):
+        layout = QVBoxLayout()
+        layout.setAlignment(Qt.AlignCenter)
+        
+        # Horizontal layout for "Welcome to" + logo
+        title_layout = QHBoxLayout()
+        title_layout.setAlignment(Qt.AlignCenter)
+
+        welcome_label = UIHelper.create_label("Welcome to ", 48)
+        
+        logo_label = QLabel()
+        logo_pixmap = QPixmap("./assets/PostSync Logo_scaled.png")
+        # logo_pixmap = logo_pixmap.scaledToHeight(48, Qt.SmoothTransformation)  # Match text height
+        logo_label.setPixmap(logo_pixmap)
+        logo_label.setAlignment(Qt.AlignCenter)
+
+        title_layout.addWidget(welcome_label)
+        title_layout.addWidget(logo_label)
+
+        layout.addLayout(title_layout)
+        layout.addWidget(UIHelper.create_label("Before you start, please ensure that your workstation is set up like the example below:", 
+                                            12), alignment=Qt.AlignCenter)
+
+        infographic = QLabel()
+        pixmap = QPixmap("./assets/workstation_setup.png")
+        pixmap = pixmap.scaled(600, 350, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        infographic.setPixmap(pixmap)
+        infographic.setAlignment(Qt.AlignCenter)
+        
+         # Apply rounded corners using stylesheet
+        infographic.setStyleSheet("""
+            border-radius: 12px;
+            border: 1px solid #ccc;
+            background-color: #ffffff;
+            padding: 4px;
+        """)
+        
+        layout.addWidget(infographic)
+        
+        self.understand_button = UIHelper.create_button("I Understand")
+        self.understand_button.clicked.connect(self.proceed_to_main_app)
+        layout.addWidget(self.understand_button, alignment=Qt.AlignCenter)
+
+        self.setLayout(layout)
+
+    def proceed_to_main_app(self):
+        self.stacked_widget.setCurrentIndex(1)
+        
 class HomePage(QWidget):
     def __init__(self, stacked_widget, logs_page):
         super().__init__()
@@ -115,6 +169,7 @@ class HomePage(QWidget):
         self.posture_start_time = time.time()
         self.last_notification = None
         self.notifications_enabled = False  # Default: notifications on
+        self.info_popup = None  # ✅ Initialize popup reference here
 
         self.init_ui()
         self.setup_pressure_heatmap()
@@ -224,14 +279,25 @@ class HomePage(QWidget):
         right_layout = QVBoxLayout()
         right_layout.setSpacing(0)
         right_layout.setContentsMargins (0, 0, 0, 0)
+        
+        # --- Info Button ---
+        self.info_button = QPushButton(" Click here to see proper workstation setup")
+        self.info_button.setIcon(QIcon("./assets/info.png"))
+        # self.info_button.setFixedSize(None, 16)
+        self.info_button.setStyleSheet("border: 2px; color: #B3B3B3")
+        self.info_button.setCursor(Qt.PointingHandCursor)
+        self.info_button.clicked.connect(self.show_info_popup)
+        
+        # Position info button top-right
+        right_layout.addWidget(self.info_button, Qt.AlignRight)
 
         # Create QLabel to display the guidelines image
         self.guidelines_image = QLabel()
-        pixmap = QPixmap("./assets/guidelines.png")
+        guidlines_pixmap = QPixmap("./assets/guidelines.png")
 
         # Optional: scale the image to fit the QLabel size
-        pixmap = pixmap.scaled(400, 300, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-        self.guidelines_image.setPixmap(pixmap)
+        guidlines_pixmap = guidlines_pixmap.scaled(400, 300, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        self.guidelines_image.setPixmap(guidlines_pixmap)
         self.guidelines_image.setFixedSize(420, 300)
         self.guidelines_image.setAlignment(Qt.AlignCenter)
 
@@ -239,7 +305,7 @@ class HomePage(QWidget):
         self.guidelines_image.setStyleSheet("""
             border-radius: 12px;
             border: 1px solid #ccc;
-            background-color: #f8f8f8;
+            background-color: #ffffff;
             padding: 4px;
         """)
 
@@ -248,6 +314,37 @@ class HomePage(QWidget):
         bottom_layout = self.create_bottom_controls()
         right_layout.addLayout(bottom_layout)
         return right_layout
+    
+    
+    def show_info_popup(self):
+        if self.info_popup is None:
+            self.info_popup = QDialog(self)
+            self.info_popup.setWindowTitle("Workspace Setup Guidelines")
+            self.info_popup.setFixedSize(560, 315)
+            self.info_popup.setModal(False)
+
+            layout = QVBoxLayout()
+                        
+            infographic = QLabel()
+            pixmap = QPixmap("./assets/workstation_setup.png")
+            pixmap = pixmap.scaled(480, 270, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            infographic.setPixmap(pixmap)
+            infographic.setAlignment(Qt.AlignCenter)
+            
+            # Apply rounded corners using stylesheet
+            infographic.setStyleSheet("""
+                border-radius: 12px;
+                border: 1px solid #ccc;
+                background-color: #ffffff;
+                padding: 4px;
+            """)
+            
+            layout.addWidget(infographic)
+            self.info_popup.setLayout(layout)
+
+        self.info_popup.show()
+        self.info_popup.raise_()
+        self.info_popup.activateWindow()
 
     def create_bottom_controls(self):
         bottom_layout = QHBoxLayout()
@@ -332,7 +429,7 @@ class HomePage(QWidget):
             self.last_notification = "good"
 
         elif finalNotif in bad_postures:
-            if (not hasattr(self, 'last_notification_time')) or (current_time - self.last_notification_time >= 10):
+            if current_time - self.last_notification_time >= 30:
                 print("❌ Bad posture notification triggered!")
                 self.show_notification("Bad Posture! Fix your sitting position.")
                 self.last_notification = "bad"
@@ -516,6 +613,7 @@ class LogsPage(QWidget):
     def go_back(self):
         """Go back to the main detection page."""
         self.parent().setCurrentIndex(0)  # Adjust based on your stacked widget index
+        
 
 class PostSyncApp(QMainWindow):
     def __init__(self):
@@ -527,12 +625,14 @@ class PostSyncApp(QMainWindow):
         self.setContentsMargins(36, 24, 36, 24)
 
         self.stacked_widget = QStackedWidget()
-
+        
+        self.welcome_screen = WelcomeScreen(self.stacked_widget)
         self.logs_page = LogsPage(self.stacked_widget)
         self.home_page = HomePage(self.stacked_widget, self.logs_page)
 
-        self.stacked_widget.addWidget(self.home_page)  # HomePage (index 0)
-        self.stacked_widget.addWidget(self.logs_page)  # LogsPage (index 1) 
+        self.stacked_widget.addWidget(self.welcome_screen) # WelcomeScreen (index 0)
+        self.stacked_widget.addWidget(self.home_page)  # HomePage (index 1)
+        self.stacked_widget.addWidget(self.logs_page)  # LogsPage (index 2) 
         
         self.setCentralWidget(self.stacked_widget)
     
@@ -544,7 +644,6 @@ class PostSyncApp(QMainWindow):
         #posture_database.export_to_csv()  # Export posture logs to CSV
         #print("CSV export complete.")  # Debugging confirmation
         event.accept()  # Ensures the application closes properly
-
 
 
 if __name__ == "__main__":
