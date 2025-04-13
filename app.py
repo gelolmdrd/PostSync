@@ -25,6 +25,7 @@ import csv
 import sqlite3
 import posture_database
 from posture_database import export_to_csv
+from posture_database import log_event_to_csv
 import traceback
 from features import get_latest_vision_posture
 from data_collection import get_latest_pressure_posture
