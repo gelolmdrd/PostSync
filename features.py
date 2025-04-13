@@ -222,7 +222,7 @@ class PostureDetector(QObject):
                 filepath = os.path.join(posture_folder, filename)
 
                 cv2.imwrite(filepath, image) 
-                #print(f"📸 Saved screenshot: {filepath}")
+                #print(f"Saved screenshot: {filepath}")
                 self.screenshot_counts[filtered_posture] += 1
 
                 

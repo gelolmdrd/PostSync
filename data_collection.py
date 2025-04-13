@@ -62,7 +62,7 @@ heatmap = sns.heatmap(dummy_matrix, annot=False, cmap="RdYlGn_r",
 cbar = heatmap.collections[0].colorbar  # Store the color bar
 
 # Embedding Matplotlib figure inside Tkinter
-canvas = FigureCanvas(fig)  # ✅ Use PyQt-compatible canvas
+canvas = FigureCanvas(fig)  #Use PyQt-compatible canvas
 
 # Label for detected posture
 
@@ -190,7 +190,7 @@ def check_and_trigger_haptic(sensor_values):
 
 def update_posture_in_app(posture, parent_widget=None):
     """Update posture in the UI."""
-    from app import HomePage  # ✅ Import inside the function
+    from app import HomePage  #Import inside the function
 
     if parent_widget and isinstance(parent_widget, HomePage):
         parent_widget.update_pressure_posture(posture)
@@ -239,24 +239,24 @@ def update(frame):
             posture = classify_posture(sensor_values)
 
             update_posture_in_app(posture)
-            posture_label.setText(f"Detected: {posture}")  # ✅ Still updates local UI
+            posture_label.setText(f"Detected: {posture}")  #Still updates local UI
 
             # Check for haptic feedback trigger
             check_and_trigger_haptic(sensor_values)
 
             canvas.draw()
 
-            # ✅ Reset error notification if successful
+            #Reset error notification if successful
             pressure_sensor_error_notified = False
 
     except requests.exceptions.RequestException as e:
         if not pressure_sensor_error_notified:
-            print(f"⚠️ Warning: Pressure sensor is not responding. Error: {e}")
+            print(f"Warning: Pressure sensor is not responding. Error: {e}")
             pressure_sensor_error_notified = True
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
     print(f"[{timestamp}] Raw: {raw_posture} | Filtered: {filtered_posture}")
 
-# ✅ Simple getter
+#Simple getter
 def get_latest_pressure_posture():
     return latest_pressure_posture
 

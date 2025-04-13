@@ -417,7 +417,7 @@ class HomePage(QWidget):
             message != self._last_notification["message"]
             or now - self._last_notification["time"] > cooldown
         ):
-            print(f"🔔 Notification sent: {message}")
+            print(f"Notification sent: {message}")
             try:
                 notification.notify(
                     title="Posture Alert",
@@ -427,7 +427,7 @@ class HomePage(QWidget):
                 self._last_notification["message"] = message
                 self._last_notification["time"] = now
             except Exception as e:
-                print(f"⚠️ Notification error: {e}")
+                print(f"Notification error: {e}")
 
     def check_final_posture_and_notify(self):
         if not self.notifications_enabled:
@@ -450,19 +450,19 @@ class HomePage(QWidget):
         time_since_last_notif = current_time - self.last_notification_time
 
         if finalNotif == good_posture and posture_duration >= 5 and (self.last_notification != "good" or time_since_last_notif >= 30):
-            print("✅ Good posture notification triggered!")
+            print("Good posture notification triggered!")
             self.trigger_notification("Good Posture! Keep It Up.")
             self.last_notification = "good"
             self.last_notification_time = current_time
 
         elif finalNotif in bad_postures and posture_duration >= 1 and time_since_last_notif >= 30:
-            print("❌ Bad posture notification triggered!")
+            print("Bad posture notification triggered!")
             self.trigger_notification("Bad Posture! Fix your sitting position.")
             self.last_notification = "bad"
             self.last_notification_time = current_time
 
         elif finalNotif == no_user and posture_duration >= 1 and self.last_notification != "no user":
-            print("🚫 No person detected notification triggered!")
+            print("No person detected notification triggered!")
             self.trigger_notification("No Person Detected on Chair.")
             self.last_notification = "no user"
             self.last_notification_time = current_time
@@ -494,9 +494,9 @@ class HomePage(QWidget):
         layout = QHBoxLayout()
         layout.addWidget(UIHelper.create_label(label_text, 12, (120, 24)))
         toggle = QCheckBox()
-        toggle.setChecked(True)  # ✅ Set the default state to ON (checked)
-        toggle.setIcon(QIcon("./assets/toggleOn.png"))  # ✅ Set the ON icon initially
-        pixmap = QPixmap("./assets/toggleOn.png")  # ✅ Use ON icon to match the checked state
+        toggle.setChecked(True)  #Set the default state to ON (checked)
+        toggle.setIcon(QIcon("./assets/toggleOn.png"))  #Set the ON icon initially
+        pixmap = QPixmap("./assets/toggleOn.png")  #Use ON icon to match the checked state
         if not pixmap.isNull():
             toggle.setIcon(QIcon(pixmap))
             size = pixmap.size()
@@ -627,8 +627,9 @@ class LogsPage(QWidget):
     def go_back(self):
         """Go back to the main detection page."""
         self.parent().setCurrentIndex(1)  # Adjust based on your stacked widget index
-        
 
+
+        
 class PostSyncApp(QMainWindow):
     def __init__(self):
         super().__init__()

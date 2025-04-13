@@ -8,13 +8,10 @@ scikeras
 joblib
 opencv-python
 mediapipe
-scikit-learn
 asyncio
-playsound
-pyserial 
+playsound==1.2.2
+pyserial
 requests
 ipykernel
 seaborn
-playsound==1.2.2
-pyserial 
 plyer
