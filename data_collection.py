@@ -9,6 +9,7 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.animation import FuncAnimation
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from PyQt5.QtWidgets import QLabel
+from posture_database import log_event_to_csv
 import tkinter as tk
 import threading
 from datetime import datetime
@@ -165,7 +166,7 @@ def check_and_trigger_haptic(sensor_values):
             if current_time - last_haptic_trigger_time >= HAPTIC_TRIGGER_INTERVAL:
                 try:
                     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
-                    print(f"[{timestamp}]" "Triggering haptic feedback (1)")
+                    log_event_to_csv("Triggering haptic feedback (1)")
                     requests.get(f"{NODEMCU_IP}{ENDPOINT_TRIGGER}?trigger=1")
                     haptic_active = True
                     last_haptic_trigger_time = current_time
@@ -174,7 +175,7 @@ def check_and_trigger_haptic(sensor_values):
                     def stop_haptic():
                         try:
                             timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
-                            print(f"[{timestamp}]" "Turning off haptic feedback (0)")
+                            log_event_to_csv("Turning off haptic feedback (0)")
                             requests.get(f"{NODEMCU_IP}{ENDPOINT_TRIGGER}?trigger=0")
                             haptic_active = False
                         except requests.RequestException as e:

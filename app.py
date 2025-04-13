@@ -451,18 +451,21 @@ class HomePage(QWidget):
 
         if finalNotif == good_posture and posture_duration >= 5 and (self.last_notification != "good" or time_since_last_notif >= 30):
             print("Good posture notification triggered!")
+            log_event_to_csv("Good Posture! Keep It Up.")
             self.trigger_notification("Good Posture! Keep It Up.")
             self.last_notification = "good"
             self.last_notification_time = current_time
 
         elif finalNotif in bad_postures and posture_duration >= 1 and time_since_last_notif >= 30:
             print("Bad posture notification triggered!")
+            log_event_to_csv("Bad Posture! Fix your sitting position.")
             self.trigger_notification("Bad Posture! Fix your sitting position.")
             self.last_notification = "bad"
             self.last_notification_time = current_time
 
         elif finalNotif == no_user and posture_duration >= 1 and self.last_notification != "no user":
             print("No person detected notification triggered!")
+            log_event_to_csv("No Person Detected on Chair.")
             self.trigger_notification("No Person Detected on Chair.")
             self.last_notification = "no user"
             self.last_notification_time = current_time

@@ -68,6 +68,19 @@ def export_to_csv():
     df.to_csv(csv_path, index=False)
     print(f"[SUCCESS] Posture data exported to {csv_path}")
 
+def log_event_to_csv(message, filename="event_logs.csv"):
+    """Appends a timestamped event message to a CSV log file."""
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+    file_path = os.path.join(os.getcwd(), filename)
+
+    file_exists = os.path.isfile(file_path)
+    
+    with open(file_path, mode='a', newline='') as file:
+        writer = csv.writer(file)
+        if not file_exists:
+            writer.writerow(["Timestamp", "Event"])  # Write header only once
+        writer.writerow([timestamp, message])
+        
 # Initialize the database on module load
 initialize_database()
 
