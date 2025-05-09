@@ -2,6 +2,7 @@ import requests
 import time
 import numpy as np
 import matplotlib.pyplot as plt
+import csv
 import seaborn as sns
 import tkinter as tk
 from datetime import datetime

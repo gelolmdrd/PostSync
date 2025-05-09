@@ -1,6 +1,7 @@
 import sys
 import os
 import cv2
+import csv
 import mediapipe as mp
 import pandas as pd
 import numpy as np
@@ -239,7 +240,7 @@ class PostureDetector(QObject):
 
             # Display prediction and probability
             if 'prob' in locals() and prob is not None:
-                cv2.putText(image, f"Posture: {pred} ({prob*100:.2f}%)", (50, 50),
+                cv2.putText(image, f"Posture: {pred}", (50, 50),
                             cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2, cv2.LINE_AA)
             else:
                 cv2.putText(image, f"Posture: {pred}", (50, 50),

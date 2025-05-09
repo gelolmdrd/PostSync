@@ -31,9 +31,9 @@ from features import get_latest_vision_posture
 from data_collection import get_latest_pressure_posture
 from plyer import notification
 from PyQt5.QtCore import QTimer
-
 import ctypes
-myappid = u"PostSync"  # Can be any unique string
+
+myappid = u"PostSync" 
 ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
 
 def print_current_postures():
@@ -131,7 +131,7 @@ class WelcomeScreen(QWidget):
         infographic.setPixmap(pixmap)
         infographic.setAlignment(Qt.AlignCenter)
         
-         # Apply rounded corners using stylesheet
+        # Apply rounded corners using stylesheet
         infographic.setStyleSheet("""
             border-radius: 12px;
             border: 1px solid #ccc;
@@ -175,7 +175,7 @@ class HomePage(QWidget):
         self.info_popup = None  # ✅ Initialize popup reference here
 
         self.init_ui()
-        self.setup_pressure_heatmap()
+        self.setup_posture_guides()
 
     def init_ui(self):
         main_layout = QHBoxLayout()
@@ -186,56 +186,34 @@ class HomePage(QWidget):
         main_layout.addLayout(right_layout)
         self.setLayout(main_layout)
 
-    def setup_pressure_heatmap(self):
-        """Initialize the pressure heatmap but do NOT start animation until Start is clicked."""
+    def setup_posture_guides(self):
+        """Initialize the guideline image placeholder instead of the heatmap."""
         self.ax = self.pressure_canvas.figure.add_subplot(111)
-        # ✅ Do NOT start animation automatically
-        self.ani = None
-
-        self.chair_layout = np.array([
-            [1,  0,  0,  0,  4],
-            [2,  0,  8,  0,  5],
-            [3,  0,  9,  0,  6],
-            [7,  0,  0,  0, 10],
-            [0, 11, 12, 13,  0]
-        ])
-
-        self.heatmap_data = np.full_like(self.chair_layout, np.nan, dtype=np.float64)
-
-        if not hasattr(self, 'heatmap') or self.heatmap is None:
-            self.ax.clear()
-            self.heatmap = self.ax.imshow(self.heatmap_data, cmap="RdYlGn_r", interpolation="nearest", animated=True, vmin=0, vmax=10)
-
-            self.ax.set_xticks([])
-            self.ax.set_yticks([])  
-
+        self.ax.axis('off')  # Turn off axis for image display
+        self.guideline_image = None
+        self.current_displayed_posture = None  # Track current displayed posture to avoid reloads
         self.pressure_canvas.figure.tight_layout()
         plt.close('all')
         
-    def run_data_collection():
-        """Start data collection as a background process."""
-        data_collection.start_recording()  # Ensure this function starts the haptic feedback loop
+    def display_guideline_image(self, posture):
+        """Display a guideline image corresponding to the detected posture."""
+        if posture != self.current_displayed_posture:
+            self.ax.clear()
+            self.ax.axis('off')
 
-    def update_pressure_heatmap(self, frame):
-        """Fetch real sensor data and update the heatmap."""
-        try:
-            response = requests.get(f"{NODEMCU_IP}{ENDPOINT}", timeout=3)
-            if response.status_code == 200:
-                csv_data = response.text.strip()
-                sensor_values = [float(v) for v in csv_data.split(",")]
+            image_path = f"assets/{posture.replace(' ', '-').lower()}-guide.png"
+            if os.path.exists(image_path):
+                image = plt.imread(image_path)
+                self.ax.imshow(image)
+            else:
+                self.ax.text(0.5, 0.5, "Guide Not Found", fontsize=12, ha='center', va='center')
 
-                if len(sensor_values) == 13:
-                    sensor_matrix = np.full_like(self.chair_layout, np.nan, dtype=np.float64)
-                    
-                    for i, sensor_index in enumerate(self.chair_layout.flatten()):
-                        if sensor_index > 0:
-                            sensor_matrix[np.where(self.chair_layout == sensor_index)] = sensor_values[sensor_index - 1]
-
-                    self.heatmap.set_data(sensor_matrix)
-                    self.pressure_canvas.figure.canvas.draw_idle()
-
-        except requests.RequestException as e:
-            print(f"Warning: Failed to get sensor data: {e}")
+            self.pressure_canvas.draw()
+            self.current_displayed_posture = posture
+            
+    def update_posture_display(self, posture):
+        """Update the UI with the current posture and show the corresponding guideline image."""
+        self.display_guideline_image(posture)
 
     def create_left_section(self):
         left_layout = QVBoxLayout()
@@ -253,9 +231,9 @@ class HomePage(QWidget):
         logo_label.setFixedSize(242, 65)
         left_layout.addWidget(logo_label)
 
-        # Pressure Data
+        # Posture Guide
         left_layout.addWidget(UIHelper.create_label(
-            "Cushion Activity", 14, (170, 16)))
+            "Activity", 14, (170, 16)))
 
         # Placeholder for displaying the heatmap of pressure data from the sensors
         self.pressure_layout = QVBoxLayout()
@@ -518,6 +496,7 @@ class HomePage(QWidget):
     def update_posture_status(self, posture):
         """Update the UI with the detected posture and log it with a timestamp."""
         self.posture_status.setText(print_final_posture())
+        self.display_guideline_image(posture)
 
         # Get current date and time
         current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -547,16 +526,16 @@ class HomePage(QWidget):
             self.detector.start_detection()
             self.vision_detector.start_detection()
             data_collection.start_recording()
-            self.trigger_notification("Test notification from PostSync!")
+            
 
-            if self.heatmap is None:
-                self.setup_pressure_heatmap()
+            # if self.heatmap is None:
+            #     self.setup_pressure_heatmap()
 
-            if self.ani is None:
-                # Run animation update using PyQt's main event loop
-                self.timer = QTimer()
-                self.timer.timeout.connect(lambda: self.update_pressure_heatmap(None))
-                self.timer.start(1000)  # Update every second
+            # if self.ani is None:
+            #     # Run animation update using PyQt's main event loop
+            #     self.timer = QTimer()
+            #     self.timer.timeout.connect(lambda: self.update_pressure_heatmap(None))
+            #     self.timer.start(1000)  # Update every second
 
         else:
             self.detector.stop_detection()
