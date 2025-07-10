@@ -182,3 +182,5 @@ cython_debug/
 
 # Ignore DB files
 .db
+
+README.md
